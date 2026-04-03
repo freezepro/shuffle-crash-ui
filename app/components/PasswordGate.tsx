@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiUrl } from "../lib/apiBase";
 
 const AUTH_URL = apiUrl("/auth/login");
@@ -8,7 +8,18 @@ const AUTH_KEY = "crash_auth";
 
 export default function PasswordGate({ children }: { children: React.ReactNode }) {
   const [passed, setPassed] = useState(false);
+  const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined" && localStorage.getItem(AUTH_KEY) === "1") {
+        setPassed(true);
+      }
+    } finally {
+      setReady(true);
+    }
+  }, []);
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -36,9 +47,7 @@ export default function PasswordGate({ children }: { children: React.ReactNode }
     }
   };
 
-  if (!passed && typeof window !== "undefined" && localStorage.getItem(AUTH_KEY) === "1") {
-    setPassed(true);
-  }
+  if (!ready) return null;
 
   if (passed) return <>{children}</>;
 
