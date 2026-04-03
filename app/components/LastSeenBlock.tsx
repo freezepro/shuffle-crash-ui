@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-
-const BASE_URL = "https://crash-server-h01y.onrender.com";
+import { apiUrl } from "../lib/apiBase";
 
 export default function LastSeenBlock() {
   const [lastSeen, setLastSeen] = useState<Record<string, number | null> | null>(null);
@@ -14,8 +13,8 @@ export default function LastSeenBlock() {
     async function load() {
       try {
         const [lastSeenRes, medRes] = await Promise.all([
-          fetch(`${BASE_URL}/api/last-seen`, { cache: "no-store" }),
-          fetch(`${BASE_URL}/api/medians`, { cache: "no-store" }),
+          fetch(apiUrl("/api/last-seen"), { cache: "no-store" }),
+          fetch(apiUrl("/api/medians"), { cache: "no-store" }),
         ]);
 
         const lastSeenJson = await lastSeenRes.json();

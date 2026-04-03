@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { apiUrl } from "../lib/apiBase";
 
-const URL = "https://crash-server-h01y.onrender.com/api/medians";
 const WINDOWS = [50, 100, 200, 500, 1000, 3000];
 
 export default function MediansStrip() {
@@ -15,7 +15,7 @@ export default function MediansStrip() {
       if (inflightRef.current) return;
       inflightRef.current = true;
       try {
-        const res = await fetch(`${URL}?_t=${Date.now()}`, { cache: "no-store" });
+        const res = await fetch(`${apiUrl("/api/medians")}?_t=${Date.now()}`, { cache: "no-store" });
         const data = await res.json();
         const vals = Array.isArray(data?.medians) ? data.medians : [];
         setMedians(vals);

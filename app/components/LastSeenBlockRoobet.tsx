@@ -1,15 +1,14 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { apiUrl } from "../lib/apiBase";
 
 export default function LastSeenBlock() {
   const [lastSeen, setLastSeen] = useState<any>(null);
 
   useEffect(() => {
       async function load() {
-            // const url = "https://crash-server-jimg.onrender.com/api/roobet/last-seen"
-             const url = "https://crash-server-h01y.onrender.com/api/roobet/last-seen"
-          const res = await fetch(url, {
+          const res = await fetch(apiUrl("/api/roobet/last-seen"), {
               cache: "no-store",
           });
       const json = await res.json();

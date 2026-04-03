@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { apiUrl } from "../lib/apiBase";
 
 type CrashRow = {
   gameNumber: number; // gameIndex
@@ -15,7 +16,7 @@ const PAGE_SIZE_COMPACT = COMPACT_COLS * COMPACT_ROWS_PER_COL; // 200
 
 
 function buildUrl(pageIndex: number, limit: number) {
-  return `https://roob-server.onrender.com/api/roobet/crash?page=${pageIndex}&limit=${limit}`;
+  return `${apiUrl("/api/roobet/crash")}?page=${pageIndex}&limit=${limit}`;
 }
 
 function normalizeRow(g: any): CrashRow | null {
@@ -162,7 +163,7 @@ export default function RoobetCrashHistory() {
     if (!isLatestPage) return;
     if (!bootstrapped) return;
 
-    const es = new EventSource("https://roob-server.onrender.com/api/roobet/stream");
+    const es = new EventSource(apiUrl("/api/roobet/stream"));
 
     es.addEventListener("new_game", (e) => {
       try {

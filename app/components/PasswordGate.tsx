@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { apiUrl } from "../lib/apiBase";
 
-const AUTH_URL = "https://crash-server-h01y.onrender.com/auth/login";
+const AUTH_URL = apiUrl("/auth/login");
 const AUTH_KEY = "crash_auth";
 
 export default function PasswordGate({ children }: { children: React.ReactNode }) {

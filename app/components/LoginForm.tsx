@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { apiUrl } from "../lib/apiBase";
 
 export default function LoginForm() {
   const [password, setPassword] = useState("");
@@ -10,8 +11,7 @@ export default function LoginForm() {
     e.preventDefault();
     setError("");
 
-    // const url = "https://crash-server-jimg.onrender.com/auth/login"
-    const url = "https://crash-server-h01y.onrender.com/auth/login"
+    const url = apiUrl("/auth/login");
 
     const res = await fetch(url, {
       method: "POST",

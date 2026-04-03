@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { apiUrl } from "../lib/apiBase";
 
 type CrashRow = {
   gameNumber: number; // gameIndex
@@ -12,7 +13,7 @@ const PAGE_SIZE_NORMAL = 50;
 const COMPACT_COLS = 10;
 
 function buildUrl(pageIndex: number, limit: number) {
-  return `https://crash-server-h01y.onrender.com/api/crash?page=${pageIndex}&limit=${limit}`;
+  return `${apiUrl("/api/crash")}?page=${pageIndex}&limit=${limit}`;
 }
 
 function normalizeRow(g: any): CrashRow | null {
@@ -170,7 +171,7 @@ export default function StakeCrashHistory() {
     if (!isLatestPage) return;
     if (!bootstrapped) return;
 
-    const es = new EventSource("https://crash-server-h01y.onrender.com/api/stream");
+    const es = new EventSource(apiUrl("/api/stream"));
 
     es.addEventListener("new_game", (e) => {
       try {

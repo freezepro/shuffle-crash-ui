@@ -12,9 +12,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { apiUrl } from "../lib/apiBase";
 
-const SNAPSHOT_URL = "https://crash-server-h01y.onrender.com/api/liveup/snapshot";
-const EVENTS_URL = "https://crash-server-h01y.onrender.com/api/stream";
+const SNAPSHOT_URL = apiUrl("/api/liveup/snapshot");
+const EVENTS_URL = apiUrl("/api/stream");
 
 type Snapshot = {
   success: boolean;

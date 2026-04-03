@@ -11,6 +11,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { apiUrl } from "../lib/apiBase";
 
 // ---------- TYPES ----------
 
@@ -140,9 +141,7 @@ export default function CrashDashboard() {
   const fetchPage = useCallback(async (page: number) => {
     const limit = PAGE_SIZE;
 
-    const res = await fetch(
-      `https://crash-server-h01y.onrender.com/api/crash?page=${page}&limit=${limit}`
-    );
+    const res = await fetch(`${apiUrl("/api/crash")}?page=${page}&limit=${limit}`);
     const json = await res.json();
 
     const ordered = [...json.data].reverse();
@@ -223,7 +222,7 @@ export default function CrashDashboard() {
     if (pageIndex !== 0) return;
 
     console.log("📡 SSE connect");
-    const es = new EventSource("https://crash-server-h01y.onrender.com/api/stream");
+    const es = new EventSource(apiUrl("/api/stream"));
 
     es.addEventListener("new_game", (e) => {
       const g = JSON.parse((e as MessageEvent).data);

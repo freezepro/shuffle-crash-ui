@@ -11,6 +11,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { apiUrl } from "../lib/apiBase";
 
 // ---------- TYPES ----------
 
@@ -135,7 +136,7 @@ export default function CrashDashboardRoobet() {
     // page 0: беремо менше (ти все одно показуєш 3500)
     const limit = page === 0 ? 6500 : PAGE_SIZE;
 
-    const url = `https://crash-server-h01y.onrender.com/api/roobet/crash?page=${page}&limit=${limit}`;
+    const url = `${apiUrl("/api/roobet/crash")}?page=${page}&limit=${limit}`;
     const res = await fetch(url);
 
     if (!res.ok) {
@@ -231,7 +232,7 @@ export default function CrashDashboardRoobet() {
 
     console.log("📡 SSE connect (roobet)");
 
-    const es = new EventSource("https://crash-server-h01y.onrender.com/api/roobet/stream");
+    const es = new EventSource(apiUrl("/api/roobet/stream"));
 
     es.addEventListener("new_game", (e) => {
       const g = JSON.parse((e as MessageEvent).data);
