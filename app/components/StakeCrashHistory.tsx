@@ -36,7 +36,7 @@ function formatDate(ts: string) {
 }
 
 function multiplierKey(x: number) {
-  return (Math.floor(x * 100) / 100).toFixed(2);
+  return x.toFixed(2);
 }
 
 function getSimilarRange(anchor: number): { min: number; max: number } {
