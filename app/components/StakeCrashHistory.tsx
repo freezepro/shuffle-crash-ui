@@ -11,6 +11,10 @@ type CrashRow = {
 
 const PAGE_SIZE_NORMAL = 50;
 const COMPACT_COLS = 10;
+const RECENT_HOT_WINDOW = 80;
+const CLUSTER_MIN_HITS = 3;
+const TRIPLE_SPAN_MAX_ROUNDS = 7;
+const CONTINUE_10X_MAX_GAP = 4;
 
 function buildUrl(pageIndex: number, limit: number) {
   return `${apiUrl("/api/crash")}?page=${pageIndex}&limit=${limit}`;
@@ -36,7 +40,7 @@ function formatDate(ts: string) {
 }
 
 function multiplierKey(x: number) {
-  return x.toFixed(2);
+  return (Math.floor(x * 100) / 100).toFixed(2);
 }
 
 function getSimilarRange(anchor: number): { min: number; max: number } {
@@ -81,6 +85,51 @@ function within2dp(x: number, min: number, max: number) {
   const mn = toCents(min);
   const mx = toCents(max);
   return v >= mn && v <= mx;
+}
+
+function buildRecentClusterMaps(entries: CrashRow[]) {
+  const hotHitSet = new Set<number>();
+  const betweenSet = new Set<number>();
+  if (!Array.isArray(entries) || entries.length === 0) return { hotHitSet, betweenSet };
+
+  const limit = Math.min(RECENT_HOT_WINDOW, entries.length);
+  const hits9: number[] = [];
+  const hits10: number[] = [];
+  for (let i = 0; i < limit; i++) {
+    const m = entries[i]?.multiplier;
+    if (!Number.isFinite(m)) continue;
+    if (m >= 9) hits9.push(i);
+    if (m >= 10) hits10.push(i);
+  }
+  if (hits9.length < CLUSTER_MIN_HITS) return { hotHitSet, betweenSet };
+
+  for (let k = 0; k <= hits9.length - CLUSTER_MIN_HITS; k++) {
+    const start = hits9[k];
+    let end = hits9[k + CLUSTER_MIN_HITS - 1];
+    if (end - start > TRIPLE_SPAN_MAX_ROUNDS) continue;
+
+    // Continue block while 10x+ keeps arriving with <=4 gap.
+    const tenInSeed = hits10.filter((h) => h >= start && h <= end);
+    if (tenInSeed.length > 0) {
+      let anchor10 = tenInSeed[tenInSeed.length - 1];
+      for (const h of hits10) {
+        if (h <= anchor10) continue;
+        if (h - anchor10 <= CONTINUE_10X_MAX_GAP) {
+          end = h;
+          anchor10 = h;
+        } else {
+          break;
+        }
+      }
+    }
+
+    for (let i = start; i <= end; i++) betweenSet.add(i);
+    for (const h of hits9) {
+      if (h >= start && h <= end) hotHitSet.add(h);
+    }
+  }
+
+  return { hotHitSet, betweenSet };
 }
 
 
@@ -250,6 +299,7 @@ export default function StakeCrashHistory() {
     // зсув вправо: значення з колонки 1..9 кладемо над 2..10
     return bottomRow.length ? bottomRow.slice(0, 9) : []; // 9
   }, [bottomRow]);
+  const clusterMaps = useMemo(() => buildRecentClusterMaps(rows), [rows]);
 
 
   const latestKey = useMemo(() => {
@@ -285,6 +335,7 @@ export default function StakeCrashHistory() {
     (r: CrashRow) => {
       const anchor = latestMultiplierRef.current ?? latestMultiplier;
       if (anchor == null) return false;
+      if (anchor >= 10 || r.multiplier >= 10) return false;
 
       const { min, max } = getSimilarRange(anchor);
       return within2dp(r.multiplier, min, max);
@@ -334,7 +385,10 @@ export default function StakeCrashHistory() {
 
             {rows.map((r, i) => {
               const highlightGreen = shouldHighlight(r);
-              const highlightYellow = !highlightGreen && shouldHighlightSimilar(r);
+              const inClusterBetween = !highlightGreen && clusterMaps.betweenSet.has(i);
+              const isClusterHit = !highlightGreen && clusterMaps.hotHitSet.has(i);
+              const highlightYellow =
+                !highlightGreen && !inClusterBetween && !isClusterHit && shouldHighlightSimilar(r);
 
               return (
                 <div
@@ -352,6 +406,10 @@ export default function StakeCrashHistory() {
                       ? "rgba(34, 197, 94, 0.10)"
                       : highlightYellow
                         ? "rgba(234, 179, 8, 0.12)"
+                        : isClusterHit
+                          ? "rgba(56, 189, 248, 0.24)"
+                          : inClusterBetween
+                            ? "rgba(148, 163, 184, 0.24)"
                         : "transparent",
 
                     outline: highlightGreen
@@ -422,11 +480,20 @@ export default function StakeCrashHistory() {
                   </button>
                 </div>
                 {ghostRowRight.map((r, i) => (
+                  (() => {
+                    const ghostIdx = compactRows > 0 ? (i * compactRows + (compactRows - 1)) : Number.POSITIVE_INFINITY;
+                    const inClusterBetween = clusterMaps.betweenSet.has(ghostIdx);
+                    const isClusterHit = clusterMaps.hotHitSet.has(ghostIdx);
+                    return (
                   <div
                     key={`ghost-${r.gameNumber}`}
                     style={{
                       gridColumn: i + 2,
-                      background: "rgba(17, 24, 39, 0.35)",
+                      background: isClusterHit
+                        ? "rgba(56, 189, 248, 0.18)"
+                        : inClusterBetween
+                          ? "rgba(148, 163, 184, 0.16)"
+                          : "rgba(17, 24, 39, 0.35)",
                       border: "1px dashed rgba(148, 163, 184, 0.18)",
                       boxShadow: "none",
                       padding: "7px",
@@ -435,9 +502,7 @@ export default function StakeCrashHistory() {
                       fontWeight: 500,
                       borderRadius: 5,
                       color:
-                        r.multiplier >= 9
-                          ? "rgba(245,158,11,0.95)"
-                          : r.multiplier >= 2
+                        r.multiplier >= 2
                             ? "rgba(34,197,94,0.85)"
                             : "rgba(229,231,235,0.85)",
                       backdropFilter: "blur(6px)",
@@ -446,6 +511,8 @@ export default function StakeCrashHistory() {
                   >
                     {multiplierKey(r.multiplier)}x
                   </div>
+                    );
+                  })()
                 ))}
               </div>
             )}
@@ -457,7 +524,11 @@ export default function StakeCrashHistory() {
                 <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   {col.map((r, j) => {
                     const highlightGreen = shouldHighlight(r);
-                    const highlightYellow = !highlightGreen && shouldHighlightSimilar(r);
+                    const globalIdx = compactRows > 0 ? (i * compactRows + j) : Number.POSITIVE_INFINITY;
+                    const inClusterBetween = !highlightGreen && clusterMaps.betweenSet.has(globalIdx);
+                    const isClusterHit = !highlightGreen && clusterMaps.hotHitSet.has(globalIdx);
+                    const highlightYellow =
+                      !highlightGreen && !inClusterBetween && !isClusterHit && shouldHighlightSimilar(r);
 
                     return (
                       <div
@@ -468,6 +539,10 @@ export default function StakeCrashHistory() {
                             ? "rgba(34, 197, 94, 0.14)"
                             : highlightYellow
                               ? "rgba(234, 179, 8, 0.14)"
+                              : isClusterHit
+                                ? "rgba(56, 189, 248, 0.28)"
+                                : inClusterBetween
+                                  ? "rgba(148, 163, 184, 0.24)"
                               : "#111827",
 
                           border: highlightGreen
@@ -485,7 +560,10 @@ export default function StakeCrashHistory() {
                           padding: "7px",
                           textAlign: "center",
                           fontWeight: 500,
-                          color: r.multiplier >= 2 ? "#22c55e" : "#e5e7eb",
+                          color:
+                            r.multiplier >= 2
+                                ? "#22c55e"
+                                : "#e5e7eb",
                           borderRadius: 5,
                           ...(j === 0 ? styles.firstRowDivider : null),
                         }}
