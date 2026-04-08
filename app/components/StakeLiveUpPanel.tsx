@@ -16,6 +16,7 @@ import { apiUrl } from "../lib/apiBase";
 
 const SNAPSHOT_URL = apiUrl("/api/liveup/snapshot");
 const EVENTS_URL = apiUrl("/api/stream");
+const GREEN_STATE_KEY = "__stakeLiveupGreen";
 
 type Snapshot = {
   success: boolean;
@@ -191,6 +192,17 @@ export default function StakeLiveUpPanel({ active = true }: { active?: boolean }
   );
   const stats = snapshot?.stats;
   const tau = Number(snapshot?.tau) || 10;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!snapshot?.success || !snapshot?.badges) return;
+    (window as any)[GREEN_STATE_KEY] = !!badges.green;
+    window.dispatchEvent(
+      new CustomEvent("stake-liveup-badges", {
+        detail: { green: !!badges.green, green12: !!badges.green12 },
+      })
+    );
+  }, [snapshot?.success, snapshot?.badges, badges.green, badges.green12]);
 
   useEffect(() => {
     const prev = prevBadgesRef.current;

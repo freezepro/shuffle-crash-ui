@@ -4,10 +4,12 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { apiUrl } from "../lib/apiBase";
 
 const WINDOWS = [50, 100, 200, 500, 1000, 3000];
+const GREEN_STATE_KEY = "__stakeLiveupGreen";
 
 export default function MediansStrip() {
   const [medians, setMedians] = useState<number[]>([]);
   const [pS10, setPS10] = useState<number | null>(null);
+  const [liveGreenOn, setLiveGreenOn] = useState(false);
   const inflightRef = useRef(false);
 
   useEffect(() => {
@@ -33,6 +35,24 @@ export default function MediansStrip() {
     return () => clearInterval(t);
   }, []);
 
+  useEffect(() => {
+    const readGreen = () => {
+      const v = (window as any)[GREEN_STATE_KEY];
+      setLiveGreenOn(!!v);
+    };
+    readGreen();
+    const onBadges = (evt: Event) => {
+      const detail = (evt as CustomEvent<{ green?: boolean }>).detail || {};
+      setLiveGreenOn(!!detail.green);
+    };
+    window.addEventListener("stake-liveup-badges", onBadges);
+    const t = setInterval(readGreen, 1000);
+    return () => {
+      window.removeEventListener("stake-liveup-badges", onBadges);
+      clearInterval(t);
+    };
+  }, []);
+
   const mapped = useMemo(() => {
     const out: Record<number, number | null> = {};
     WINDOWS.forEach((w, i) => {
@@ -43,7 +63,7 @@ export default function MediansStrip() {
   }, [medians]);
 
   return (
-    <section style={styles.wrap}>
+    <section style={{ ...styles.wrap, ...(liveGreenOn ? styles.wrapGreenOn : null) }}>
       <div style={styles.row}>
         {WINDOWS.map((w) => {
           const m = mapped[w];
@@ -79,6 +99,11 @@ function getPSColor(p: number | null) {
 
 const styles: Record<string, React.CSSProperties> = {
   wrap: { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 10, boxShadow: "0 0 10px rgba(0,0,0,0.35)", marginBottom: 12 },
+  wrapGreenOn: {
+    border: "2px solid rgba(34,197,94,0.95)",
+    background: "linear-gradient(180deg, rgba(18,56,34,0.35), rgba(255,255,255,0.03))",
+    boxShadow: "0 0 0 2px rgba(34,197,94,0.28) inset, 0 0 28px rgba(34,197,94,0.55), 0 0 10px rgba(0,0,0,0.35)",
+  },
   row: { display: "grid", gridTemplateColumns: "repeat(7, minmax(82px, 110px))", justifyContent: "space-between", gap: 6 },
   cell: { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "10px 10px", background: "rgba(0,0,0,0.2)", textAlign: "center" },
   label: { fontSize: 11, color: "rgba(255,255,255,0.68)", fontWeight: 700 },
