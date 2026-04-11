@@ -104,17 +104,29 @@ function buildRecentClusterMaps(entries: CrashRow[]) {
   if (hits9.length < CLUSTER_MIN_HITS) return { hotHitSet, betweenSet };
 
   for (let k = 0; k <= hits9.length - CLUSTER_MIN_HITS; k++) {
-    const start = hits9[k];
+    let start = hits9[k];
     let end = hits9[k + CLUSTER_MIN_HITS - 1];
     if (end - start > TRIPLE_SPAN_MAX_ROUNDS) continue;
 
-    // Continue block while 10x+ keeps arriving with <=4 gap.
+    // If seed contains a long >4-miss break between 10x hits,
+    // move block start to the newer dense 10x chain.
     const tenInSeed = hits10.filter((h) => h >= start && h <= end);
-    if (tenInSeed.length > 0) {
-      let anchor10 = tenInSeed[tenInSeed.length - 1];
+    if (tenInSeed.length >= 2) {
+      let adjustedStart = start;
+      for (let t = 1; t < tenInSeed.length; t++) {
+        const misses = tenInSeed[t] - tenInSeed[t - 1] - 1;
+        if (misses > CONTINUE_10X_MAX_GAP) adjustedStart = tenInSeed[t];
+      }
+      start = adjustedStart;
+    }
+
+    const tenForExtend = hits10.filter((h) => h >= start && h <= end);
+    if (tenForExtend.length > 0) {
+      let anchor10 = tenForExtend[tenForExtend.length - 1];
       for (const h of hits10) {
         if (h <= anchor10) continue;
-        if (h - anchor10 <= CONTINUE_10X_MAX_GAP) {
+        const misses = h - anchor10 - 1;
+        if (misses <= CONTINUE_10X_MAX_GAP) {
           end = h;
           anchor10 = h;
         } else {
