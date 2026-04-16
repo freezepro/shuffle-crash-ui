@@ -6,6 +6,7 @@ import {
   ComposedChart,
   Legend,
   Line,
+  ReferenceLine,
   ReferenceArea,
   ResponsiveContainer,
   Tooltip,
@@ -172,10 +173,20 @@ export default function StakeLiveUpPanel({ active = true }: { active?: boolean }
   const chartData = useMemo(() => {
     const values = Array.isArray(snapshot?.values) ? snapshot!.values : [];
     const pSeries = Array.isArray(snapshot?.pSeries) ? snapshot!.pSeries : [];
+    const p2Window = 50;
+    const q2: number[] = [];
+    let q2Sum = 0;
     return values.map((v, i) => ({
       i,
       mult: v,
       pS: Number.isFinite(pSeries[i] as number) ? (pSeries[i] as number) * 100 : null,
+      p2: (() => {
+        const h2 = v >= 2 ? 1 : 0;
+        q2.push(h2);
+        q2Sum += h2;
+        if (q2.length > p2Window) q2Sum -= q2.shift();
+        return q2.length >= p2Window ? (q2Sum / p2Window) * 100 : null;
+      })(),
     }));
   }, [snapshot]);
 
@@ -263,11 +274,13 @@ export default function StakeLiveUpPanel({ active = true }: { active?: boolean }
             <XAxis dataKey="i" hide />
             <YAxis yAxisId="mult" orientation="left" stroke="rgba(120,180,255,0.8)" />
             <YAxis yAxisId="ps" orientation="right" stroke="rgba(255,185,80,0.9)" domain={[1, 25]} ticks={[1, 5, 10, 15, 20, 25]} tickFormatter={(v) => `${v}%`} />
+            <YAxis yAxisId="p2" orientation="left" stroke="rgba(52,211,153,0.9)" domain={[0, 100]} ticks={[0, 20, 40, 60, 80, 100]} tickFormatter={(v) => `${v}%`} hide />
             <Tooltip
               contentStyle={styles.tooltip}
               formatter={(value: any, name: string) => {
                 if (name === "Multiplier") return [`${Number(value).toFixed(2)}x`, name];
                 if (name === "pS %") return [`${Number(value).toFixed(1)}%`, name];
+                if (name === "≥2x %") return [`${Number(value).toFixed(1)}%`, name];
                 return [Number(value).toFixed(2), name];
               }}
             />
@@ -275,8 +288,10 @@ export default function StakeLiveUpPanel({ active = true }: { active?: boolean }
             {(snapshot?.greenSegments || []).map((seg, idx) => (
               <ReferenceArea key={`${seg.start}-${seg.end}-${idx}`} x1={seg.start} x2={seg.end} yAxisId="mult" stroke="rgba(16,200,120,0.35)" fill="rgba(16,200,120,0.14)" />
             ))}
+            <ReferenceLine yAxisId="p2" y={50} stroke="rgba(52,211,153,0.45)" strokeWidth={1} strokeDasharray="3 3" />
             <Line yAxisId="mult" type="monotone" dataKey="mult" name="Multiplier" dot={false} stroke="#55b7ff" strokeWidth={1.1} />
             <Line yAxisId="ps" type="monotone" dataKey="pS" name="pS %" dot={false} stroke="#ffb24d" strokeWidth={1.2} />
+            <Line yAxisId="p2" type="monotone" dataKey="p2" name="≥2x %" dot={false} stroke="#34d399" strokeWidth={1.2} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>
