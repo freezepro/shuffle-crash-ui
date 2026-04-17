@@ -51,7 +51,7 @@ const ALL_MEDIAN_KEYS: { key: MedianKey; label: string }[] = [
   { key: "med3000", label: "Med 3000" },
 ];
 
-const PAGE_SIZE = 4200;
+const PAGE_SIZE = 1600;
 
 const MEDIAN_COLORS: Record<MedianKey, string> = {
   med50: "#22c55e",

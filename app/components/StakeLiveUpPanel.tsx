@@ -176,18 +176,20 @@ export default function StakeLiveUpPanel({ active = true }: { active?: boolean }
     const p2Window = 50;
     const q2: number[] = [];
     let q2Sum = 0;
-    return values.map((v, i) => ({
-      i,
-      mult: v,
-      pS: Number.isFinite(pSeries[i] as number) ? (pSeries[i] as number) * 100 : null,
-      p2: (() => {
-        const h2 = v >= 2 ? 1 : 0;
-        q2.push(h2);
-        q2Sum += h2;
-        if (q2.length > p2Window) q2Sum -= q2.shift();
-        return q2.length >= p2Window ? (q2Sum / p2Window) * 100 : null;
-      })(),
-    }));
+    return values.map((v, i) => {
+      const multNum = Number(v as unknown);
+      const mult = Number.isFinite(multNum) ? multNum : null;
+      const h2 = mult != null && mult >= 2 ? 1 : 0;
+      q2.push(h2);
+      q2Sum += h2;
+      if (q2.length > p2Window) q2Sum -= q2.shift() || 0;
+      return {
+        i,
+        mult,
+        pS: Number.isFinite(pSeries[i] as number) ? (pSeries[i] as number) * 100 : null,
+        p2: q2.length >= p2Window ? (q2Sum / p2Window) * 100 : null,
+      };
+    });
   }, [snapshot]);
 
   const badges = useMemo(

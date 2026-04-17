@@ -4,13 +4,13 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { apiUrl } from "../lib/apiBase";
 
 const WINDOWS = [50, 100, 200, 500, 1000, 3000];
-const GREEN_STATE_KEY = "__stakeLiveupGreen";
 
 export default function MediansStrip() {
   const [medians, setMedians] = useState<number[]>([]);
   const [pS10, setPS10] = useState<number | null>(null);
-  const [liveGreenOn, setLiveGreenOn] = useState(false);
+  const [medCrossOn, setMedCrossOn] = useState(false);
   const inflightRef = useRef(false);
+  const prevCrossOnRef = useRef(false);
 
   useEffect(() => {
     async function load() {
@@ -36,22 +36,13 @@ export default function MediansStrip() {
   }, []);
 
   useEffect(() => {
-    const readGreen = () => {
-      const v = (window as any)[GREEN_STATE_KEY];
-      setLiveGreenOn(!!v);
-    };
-    readGreen();
-    const onBadges = (evt: Event) => {
-      const detail = (evt as CustomEvent<{ green?: boolean }>).detail || {};
-      setLiveGreenOn(!!detail.green);
-    };
-    window.addEventListener("stake-liveup-badges", onBadges);
-    const t = setInterval(readGreen, 1000);
-    return () => {
-      window.removeEventListener("stake-liveup-badges", onBadges);
-      clearInterval(t);
-    };
-  }, []);
+    const med50 = Number(medians[0]);
+    const med200 = Number(medians[2]);
+    const on = Number.isFinite(med50) && Number.isFinite(med200) && med50 > med200;
+    setMedCrossOn(on);
+    if (on && !prevCrossOnRef.current) playSignalTone();
+    prevCrossOnRef.current = on;
+  }, [medians]);
 
   const mapped = useMemo(() => {
     const out: Record<number, number | null> = {};
@@ -63,12 +54,18 @@ export default function MediansStrip() {
   }, [medians]);
 
   return (
-    <section style={{ ...styles.wrap, ...(liveGreenOn ? styles.wrapGreenOn : null) }}>
+    <section style={styles.wrap}>
       <div style={styles.row}>
         {WINDOWS.map((w) => {
           const m = mapped[w];
           return (
-            <div key={w} style={styles.cell}>
+            <div
+              key={w}
+              style={{
+                ...styles.cell,
+                ...(w === 50 && medCrossOn ? styles.cellCrossOn : null),
+              }}
+            >
               <div style={styles.label}>Med {w}</div>
               <div style={{ ...styles.value, color: getMedianTone(m) }}>{m == null ? "—" : `${m.toFixed(2)}x`}</div>
             </div>
@@ -81,6 +78,30 @@ export default function MediansStrip() {
       </div>
     </section>
   );
+}
+
+function playSignalTone() {
+  if (typeof window === "undefined") return;
+  const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+  if (!Ctx) return;
+  try {
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.value = 880;
+    gain.gain.value = 0.001;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    const now = ctx.currentTime;
+    gain.gain.exponentialRampToValueAtTime(0.05, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+    osc.start(now);
+    osc.stop(now + 0.17);
+    osc.onended = () => ctx.close().catch(() => {});
+  } catch {
+    // audio can be blocked before first user interaction
+  }
 }
 
 function getMedianTone(m: number | null) {
@@ -99,13 +120,13 @@ function getPSColor(p: number | null) {
 
 const styles: Record<string, React.CSSProperties> = {
   wrap: { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 10, boxShadow: "0 0 10px rgba(0,0,0,0.35)", marginBottom: 12 },
-  wrapGreenOn: {
-    border: "2px solid rgba(34,197,94,0.95)",
-    background: "linear-gradient(180deg, rgba(18,56,34,0.35), rgba(255,255,255,0.03))",
-    boxShadow: "0 0 0 2px rgba(34,197,94,0.28) inset, 0 0 28px rgba(34,197,94,0.55), 0 0 10px rgba(0,0,0,0.35)",
-  },
   row: { display: "grid", gridTemplateColumns: "repeat(7, minmax(82px, 110px))", justifyContent: "space-between", gap: 6 },
   cell: { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "10px 10px", background: "rgba(0,0,0,0.2)", textAlign: "center" },
+  cellCrossOn: {
+    border: "2px solid rgba(34,197,94,0.95)",
+    boxShadow: "0 0 0 2px rgba(34,197,94,0.24) inset, 0 0 14px rgba(34,197,94,0.35)",
+    borderRadius: 12,
+  },
   label: { fontSize: 11, color: "rgba(255,255,255,0.68)", fontWeight: 700 },
   value: { marginTop: 4, fontSize: 30, lineHeight: 1, fontWeight: 900 },
 };
