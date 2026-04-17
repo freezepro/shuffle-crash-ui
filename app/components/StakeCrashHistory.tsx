@@ -144,6 +144,45 @@ function buildRecentClusterMaps(entries: CrashRow[]) {
   return { hotHitSet, betweenSet };
 }
 
+function buildShort910GapMaps(entries: CrashRow[]) {
+  const betweenSet = new Set<number>();
+  const startSet = new Set<number>();
+  const endSet = new Set<number>();
+  const zeroSet = new Set<number>();
+  const labelMap = new Map<number, number>();
+  if (!Array.isArray(entries) || entries.length === 0) return { betweenSet, startSet, endSet, zeroSet, labelMap };
+
+  const hits: number[] = [];
+  for (let i = 0; i < entries.length; i++) {
+    const m = entries[i]?.multiplier;
+    if (Number.isFinite(m) && m >= 9) hits.push(i);
+  }
+  if (hits.length < 2) return { betweenSet, startSet, endSet, zeroSet, labelMap };
+
+  for (let i = 0; i < hits.length - 1; i++) {
+    const newer = hits[i];
+    const older = hits[i + 1];
+    const misses = older - newer - 1;
+    if (misses < 0 || misses > 4) continue;
+
+    if (misses === 0) {
+      zeroSet.add(older);
+      labelMap.set(older, 0);
+      continue;
+    }
+
+    const start = newer + 1;
+    const end = older - 1;
+    startSet.add(start);
+    endSet.add(end);
+    for (let j = start; j <= end; j++) betweenSet.add(j);
+    const labelIdx = Math.floor((start + end) / 2);
+    labelMap.set(labelIdx, misses);
+  }
+
+  return { betweenSet, startSet, endSet, zeroSet, labelMap };
+}
+
 
 
 function isSameMultiplier(a: number, b: number) {
@@ -312,6 +351,7 @@ export default function StakeCrashHistory() {
     return bottomRow.length ? bottomRow.slice(0, 9) : []; // 9
   }, [bottomRow]);
   const clusterMaps = useMemo(() => buildRecentClusterMaps(rows), [rows]);
+  const shortGapMaps = useMemo(() => buildShort910GapMaps(rows), [rows]);
 
 
   const latestKey = useMemo(() => {
@@ -541,6 +581,11 @@ export default function StakeCrashHistory() {
                     const isClusterHit = !highlightGreen && clusterMaps.hotHitSet.has(globalIdx);
                     const highlightYellow =
                       !highlightGreen && !inClusterBetween && !isClusterHit && shouldHighlightSimilar(r);
+                    const inShortGap = shortGapMaps.betweenSet.has(globalIdx);
+                    const isZeroGapMarker = shortGapMaps.zeroSet.has(globalIdx);
+                    const shortGapStart = shortGapMaps.startSet.has(globalIdx);
+                    const shortGapEnd = shortGapMaps.endSet.has(globalIdx);
+                    const shortGapLabel = shortGapMaps.labelMap.get(globalIdx);
 
                     return (
                       <div
@@ -577,10 +622,26 @@ export default function StakeCrashHistory() {
                                 ? "#22c55e"
                                 : "#e5e7eb",
                           borderRadius: 5,
+                          position: "relative",
                           ...(j === 0 ? styles.firstRowDivider : null),
                         }}
                         title={formatDate(r.timestamp)}
                       >
+                        {(inShortGap || isZeroGapMarker) ? (
+                          <div
+                            style={{
+                              ...styles.shortGapRail,
+                              ...(isZeroGapMarker ? styles.shortGapRailZero : null),
+                              ...(shortGapStart ? styles.shortGapRailStart : null),
+                              ...(shortGapEnd ? styles.shortGapRailEnd : null),
+                            }}
+                          />
+                        ) : null}
+                        {(inShortGap || isZeroGapMarker) && Number.isFinite(shortGapLabel) ? (
+                          <div style={isZeroGapMarker ? styles.shortGapLabelZero : styles.shortGapLabel}>
+                            {shortGapLabel}
+                          </div>
+                        ) : null}
                         {multiplierKey(r.multiplier)}x
                       </div>
                     );
@@ -650,5 +711,62 @@ const styles: Record<string, React.CSSProperties> = {
   firstRowDivider: {
     borderTop: "1px solid rgba(148, 163, 184, 0.35)",
     boxShadow: "inset 0 1px 0 rgba(2, 6, 23, 0.55)",
+  },
+  shortGapRail: {
+    position: "absolute",
+    left: -6,
+    top: -2,
+    bottom: -2,
+    width: 1,
+    background: "rgba(248, 56, 56, 0.95)",
+    boxShadow: "0 0 6px rgba(248, 56, 56, 0.45)",
+  },
+  shortGapRailStart: {
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
+  },
+  shortGapRailEnd: {
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2,
+  },
+  shortGapRailZero: {
+    left: -3,
+    top: -13,
+    bottom: "auto",
+    height: 24,
+  },
+  shortGapLabel: {
+    position: "absolute",
+    left: -6,
+    top: "50%",
+    transform: "translate(-50%, -50%)",
+    width: 14,
+    height: 16,
+    background: "rgba(18, 4, 4, 0.92)",
+    border: "1px solid rgba(248, 56, 56, 0.95)",
+    borderRadius: 2,
+    color: "rgba(255, 122, 122, 1)",
+    fontSize: 11,
+    fontWeight: 800,
+    lineHeight: "14px",
+    textAlign: "center",
+    pointerEvents: "none",
+  },
+  shortGapLabelZero: {
+    position: "absolute",
+    left: -3,
+    top: -2,
+    transform: "translate(-50%, -50%)",
+    width: 14,
+    height: 16,
+    background: "rgba(18, 4, 4, 0.92)",
+    border: "1px solid rgba(248, 56, 56, 0.95)",
+    borderRadius: 2,
+    color: "rgba(255, 122, 122, 1)",
+    fontSize: 11,
+    fontWeight: 800,
+    lineHeight: "14px",
+    textAlign: "center",
+    pointerEvents: "none",
   },
 };
