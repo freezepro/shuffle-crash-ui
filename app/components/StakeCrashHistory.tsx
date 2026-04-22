@@ -107,6 +107,16 @@ function buildRecentClusterMaps(entries: CrashRow[]) {
     let start = hits9[k];
     let end = hits9[k + CLUSTER_MIN_HITS - 1];
     if (end - start > TRIPLE_SPAN_MAX_ROUNDS) continue;
+    const seedHits = hits9.slice(k, k + CLUSTER_MIN_HITS);
+    let pairwiseGapOk = true;
+    for (let t = 1; t < seedHits.length; t++) {
+      const misses = seedHits[t] - seedHits[t - 1] - 1;
+      if (misses > CONTINUE_10X_MAX_GAP) {
+        pairwiseGapOk = false;
+        break;
+      }
+    }
+    if (!pairwiseGapOk) continue;
 
     // If seed contains a long >4-miss break between 10x hits,
     // move block start to the newer dense 10x chain.
