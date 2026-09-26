@@ -1,0 +1,66 @@
+.tile {
+  position: relative;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 68px;
+  padding: 7px 8px;
+  border: 1px solid rgba(94, 234, 212, 0.3);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  font-variant-numeric: tabular-nums;
+}
+.reading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  height: 26px;
+  padding-right: 18px;
+  white-space: nowrap;
+}
+.reading:last-child { padding-right: 10px; }
+.reading strong { font-size: 23px; line-height: 26px; font-weight: 900; }
+.reading small { font-size: 16px; font-weight: 700; }
+.label { color: #b8c1ca; font-size: 12px; font-weight: 700; }
+.label sup { font-size: 8px; padding-left: 1px; }
+.sound {
+  position: absolute;
+  right: 2px;
+  top: 3px;
+  width: 22px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 4px;
+  color: #fbbf24;
+  cursor: pointer;
+}
+.sound[aria-pressed="true"] { color: #5eead4; }
+.sound:hover { background: rgba(255,255,255,0.1); }
+.sound:focus-visible { outline: 2px solid #5eead4; }
+.status { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: #fbbf24; bottom: 12px; right: 10px; }
+.live { background: #5eead4; }
+.strip { container: crash-stats / inline-size; }
+.row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(90px, 110px)) minmax(136px, 148px) minmax(90px, 104px);
+  justify-content: space-between;
+  gap: 6px;
+}
+@container crash-stats (max-width: 719px) {
+  .row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tile { order: -1; grid-column: 1 / -1; padding: 8px 30px 8px 10px; display: flex; gap: 16px; align-items: center; min-height: 48px; }
+  .reading, .reading:last-child { flex: 1; padding-right: 0; }
+  .sound { top: 11px; right: 3px; }
+  .status { bottom: 5px; right: 11px; }
+}
+@container crash-stats (max-width: 339px) {
+  .tile { display: block; min-height: 68px; padding: 7px 8px; }
+  .reading { padding-right: 18px; }
+  .reading:last-child { padding-right: 10px; }
+  .sound { top: 3px; right: 2px; }
+  .status { bottom: 12px; right: 10px; }
+}

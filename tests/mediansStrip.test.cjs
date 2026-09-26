@@ -19,6 +19,8 @@ function renderStrip(medians, rate, trend = null) {
       if (id === "react") return { ...React, default: React, useState: () => [states.shift(), () => {}], useEffect() {}, useMemo: fn => fn(), useRef: value => ({ current: value }) };
       if (id.endsWith(".module.css")) return { default: { strip: "strip", row: "row" } };
       if (id === "../lib/apiBase") return { apiUrl: value => value };
+      if (id === "./useCrashPrediction") return { useCrashPrediction: () => ({ estimate: { probability: .1232916667, rowMatches: 3, gameIndex: 300 }, status: "live", alertUntil: 0 }) };
+      if (id === "./useCrashAlertSound") return { useCrashAlertSound: () => ({ muted: false, ready: false, toggle() {} }) };
       if (id.startsWith("./")) return load(id.slice(2));
       return require(id);
     }};
@@ -57,4 +59,14 @@ test("trend arrows distinguish median units from percentage-point changes", () =
   assert.ok(html.includes("0.45"));
   assert.ok(html.includes("3pp"));
   assert.match(html, /data-pause-state="paused"/);
+});
+
+test("Med 3000 is replaced by the live 20R and 10x prediction tile", () => {
+  const html = renderStrip([2.4, 2.1, 2.2, 2, 2, 2], .13);
+  assert.ok(!html.includes('data-testid="median-3000"'));
+  assert.ok(html.includes('data-testid="median-1000"'));
+  assert.match(html, /data-testid="crash-prediction" data-status="live"/);
+  assert.match(html, /3<small>\/10<\/small>/);
+  assert.match(html, />12.3%<\/strong>/);
+  assert.match(html, /Enable prediction alerts/);
 });

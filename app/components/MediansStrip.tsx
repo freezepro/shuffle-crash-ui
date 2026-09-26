@@ -3,11 +3,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { frequencyValue, medianPause, medianValue } from "./medianPause";
 import { MedianTrend, readMedianTrend, trendDescription } from "./medianTrend";
-import predictionStyles from "./MediansStrip.module.css";
+import CrashPredictionTile from "./CrashPredictionTile";
+import predictionStyles from "./CrashPredictionTile.module.css";
 import { apiUrl } from "../lib/apiBase";
 
 const URL = apiUrl("/api/medians");
-const WINDOWS = [50, 100, 200, 500, 1000, 3000];
+const WINDOWS = [50, 100, 200, 500, 1000];
 
 export default function MediansStrip() {
   const [medians, setMedians] = useState<Array<number | null>>([]);
@@ -106,6 +107,7 @@ export default function MediansStrip() {
             </div>
           );
         })}
+        <CrashPredictionTile />
         <div data-testid="median-tail10" style={{ ...styles.cell, ...(pause.frequencyLow ? styles.cellPaused : null) }}>
           <div style={styles.label}>
             <span>10x %</span>
