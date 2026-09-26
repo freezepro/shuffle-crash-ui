@@ -9,7 +9,7 @@ import StakeLiveUpPanel from "./StakeLiveUpPanel";
 export default function StakeViewTabs() {
   return (
     <div>
-      <div style={wrap(1120)}>
+      <div style={{ ...wrap(1120), boxSizing: "border-box" }}>
         <MediansStrip />
       </div>
 
