@@ -33,8 +33,9 @@ export default function LastSeenBlock() {
           "1000000x": toNum(lastSeenJson?.["1000000x"]),
         };
 
-        const ps = Number(medJson?.pS10);
-        normalized["10x%"] = Number.isFinite(ps) ? Number((ps * 100).toFixed(2)) : null;
+        const ps2 = medJson?.pS2_50;
+        normalized["2x50%"] = typeof ps2 === "number" && Number.isFinite(ps2) && ps2 >= 0 && ps2 <= 1
+          ? Number((ps2 * 100).toFixed(1)) : null;
 
         setLastSeen(normalized);
         setUpdatedAt(new Date().toLocaleTimeString());
@@ -63,7 +64,7 @@ export default function LastSeenBlock() {
     { label: "10kx", key: "10000x" },
     { label: "100kx", key: "100000x" },
     { label: "1Mx", key: "1000000x" },
-    { label: "10x %", key: "10x%" },
+    { label: "2x % (50)", key: "2x50%" },
   ];
 
   return (
@@ -76,11 +77,11 @@ export default function LastSeenBlock() {
       <div style={styles.grid}>
         {entries.map((entry) => {
           const val = lastSeen[entry.key];
-          const isPercent = entry.key === "10x%";
+          const isPercent = entry.key === "2x50%";
           return (
             <div key={entry.key} style={styles.card}>
               <div style={styles.label}>≥ {entry.label}</div>
-              <div style={{ ...styles.value, ...(isPercent ? { color: getPSColor(Number(val) / 100) } : null) }}>
+              <div style={{ ...styles.value, ...(isPercent ? { color: getPS2Color(val) } : null) }}>
                 {val === null || val === undefined ? "—" : isPercent ? `${val}%` : val}
               </div>
             </div>
@@ -96,10 +97,10 @@ function toNum(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function getPSColor(p: number) {
-  if (!Number.isFinite(p)) return "#e5e7eb";
-  if (p >= 0.12) return "#22c55e";
-  if (p >= 0.1) return "#f59e0b";
+function getPS2Color(percent: number | null) {
+  if (percent === null || !Number.isFinite(percent)) return "#e5e7eb";
+  if (percent >= 55) return "#22c55e";
+  if (percent >= 45) return "#f59e0b";
   return "#ff4d4f";
 }
 
