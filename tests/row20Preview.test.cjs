@@ -32,7 +32,7 @@ function previews(html) {
   return [...html.matchAll(/<div[^>]*data-testid="compact-preview"[^>]*>/g)].map(match => match[0]);
 }
 
-test("all ten preview slots match the 20R count, including the wrapped 200R hit", () => {
+test("nine preview slots retain the Rows control without changing the ten-position count", () => {
   const values = Array(300).fill(1);
   [10.07, 16.36, 9.94, 12.34].forEach((value, i) => {
     values[[99, 119, 139, 199][i]] = value;
@@ -40,13 +40,13 @@ test("all ten preview slots match the 20R count, including the wrapped 200R hit"
   values[198] = 100;
   const html = renderHistory(values.slice(0, 200));
   const cells = previews(html);
-  assert.equal(cells.length, 10);
+  assert.equal(cells.length, 9);
   assert.deepEqual(cells.map(cell => Number(cell.match(/data-age="(\d+)"/)[1])),
-    [200, 20, 40, 60, 80, 100, 120, 140, 160, 180]);
-  assert.equal(cells.filter(cell => cell.includes('data-pattern-hit="true"')).length, 4);
-  assert.equal(cells.slice(1).filter(cell => cell.includes('data-pattern-hit="true"')).length, 3);
+    [20, 40, 60, 80, 100, 120, 140, 160, 180]);
+  assert.equal(cells.filter(cell => cell.includes('data-pattern-hit="true"')).length, 3);
   assert.equal(estimateCrash([...values].reverse()).rowMatches, 4);
-  assert.match(html, />200R<\/span>12\.34x/);
+  assert.ok(!html.includes('data-age="200"'));
+  assert.ok(html.indexOf('>Rows:20</button>') < html.indexOf('data-testid="compact-preview"'));
   assert.match(html, /Toggle compact rows \(20\/10\)/);
 });
 
@@ -55,24 +55,25 @@ test("the partial last column cannot substitute its last value for an absent bou
   values[19] = 9;
   values[24] = 20;
   const cells = previews(renderHistory(values));
-  assert.equal(cells.length, 10);
+  assert.equal(cells.length, 9);
   assert.equal(cells.filter(cell => cell.includes('data-pattern-hit="true"')).length, 1);
-  assert.ok(!cells[0].includes("data-pattern-hit"));
-  assert.ok(!cells[2].includes("data-pattern-hit"));
+  assert.ok(cells[0].includes('data-pattern-hit="true"'));
+  assert.ok(!cells[1].includes("data-pattern-hit"));
 });
 
-test("10-row mode wraps 100R and preserves the other nine aligned previews", () => {
+test("10-row mode preserves the original nine aligned previews", () => {
   const values = Array(100).fill(1);
   values[99] = 9.5;
   const html = renderHistory(values, 10);
   const cells = previews(html);
   assert.deepEqual(cells.map(cell => Number(cell.match(/data-age="(\d+)"/)[1])),
-    [100, 10, 20, 30, 40, 50, 60, 70, 80, 90]);
-  assert.match(html, />100R<\/span>9\.50x/);
+    [10, 20, 30, 40, 50, 60, 70, 80, 90]);
+  assert.ok(!html.includes('data-age="100"'));
+  assert.match(html, />Rows:10<\/button>/);
 });
 
 test("empty history preserves preview positions without inventing matches", () => {
   const cells = previews(renderHistory([]));
-  assert.equal(cells.length, 10);
+  assert.equal(cells.length, 9);
   assert.ok(cells.every(cell => !cell.includes("data-pattern-hit")));
 });

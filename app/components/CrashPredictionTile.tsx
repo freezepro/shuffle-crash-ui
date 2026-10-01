@@ -13,7 +13,7 @@ export default function CrashPredictionTile() {
   const soundTitle = `${sound.muted ? "Unmute" : sound.ready ? "Mute" : "Enable"} prediction alerts: 20R >=3 or 10x estimate >=13%. One chime per live round. Keep this tab visible.`;
   const feedTitle = status === "live" ? `Live, after round ${estimate?.gameIndex}. Experimental estimate; no demonstrated predictive edge. Capture and network latency still apply.`
     : status === "syncing" ? "Synchronizing 300 consecutive rounds; alerts paused." : "Connecting to live rounds; alerts paused.";
-  const rowTitle = "20-round alignment for the NEXT round: results 20, 40, ... 200 rounds before it. On the latest page with Rows:20, all ten appear in the preview: 200R is the first cell, followed by 20R through 180R. Count >=9x for pattern observation only; a 9x result does not win a 10x bet.";
+  const rowTitle = "20-round alignment for the NEXT round: results 20, 40, ... 200 rounds before it. On the latest page with Rows:20, the preview shows 20R through 180R; the tenth counted position, 200R, is the bottom-right grid value. Count >=9x for pattern observation only; a 9x result does not win a 10x bet.";
   return <div className={styles.tile} data-testid="crash-prediction" data-status={status}
     data-round={estimate?.gameIndex ?? ""} title={feedTitle}>
     <span className={`${styles.status} ${status === "live" ? styles.live : ""}`} role="img" aria-label={feedTitle} />

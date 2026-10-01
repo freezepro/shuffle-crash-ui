@@ -356,8 +356,7 @@ export default function StakeCrashHistory() {
   }, [columns, compact, compactRows]);
 
   const ghostRowRight = useMemo(() => {
-    // Keep the nine shifted previews aligned; wrap the tenth (200R) into the first slot.
-    return bottomRow.length ? [bottomRow[9], ...bottomRow.slice(0, 9)] : [];
+    return bottomRow.slice(0, 9);
   }, [bottomRow]);
   const clusterMaps = useMemo(() => buildRecentClusterMaps(rows), [rows]);
   const shortGapMaps = useMemo(() => buildShort910GapMaps(rows), [rows]);
@@ -523,9 +522,15 @@ export default function StakeCrashHistory() {
                   filter: "blur(0.2px)",
                 }}
               >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <button type="button" onClick={() => setCompactRows((r) => (r === 20 ? 10 : 20))}
+                    style={rowsBtnStyle} title="Toggle compact rows (20/10)">
+                    Rows:{compactRows}
+                  </button>
+                </div>
                 {ghostRowRight.map((r, i) => (
                   (() => {
-                    const age = (i === 0 ? COMPACT_COLS : i) * compactRows;
+                    const age = (i + 1) * compactRows;
                     if (!r) return <div key={`ghost-empty-${i}`} data-testid="compact-preview" data-age={age} />;
                     const ghostIdx = age - 1;
                     const inClusterBetween = clusterMaps.betweenSet.has(ghostIdx);
@@ -537,7 +542,7 @@ export default function StakeCrashHistory() {
                     data-age={age}
                     data-pattern-hit={r.multiplier >= 9}
                     style={{
-                      gridColumn: i + 1,
+                      gridColumn: i + 2,
                       background: isClusterHit
                         ? "rgba(56, 189, 248, 0.18)"
                         : inClusterBetween
@@ -545,7 +550,7 @@ export default function StakeCrashHistory() {
                           : "rgba(17, 24, 39, 0.35)",
                       border: "1px dashed rgba(148, 163, 184, 0.18)",
                       boxShadow: "none",
-                      padding: i === 0 ? "2px" : "7px",
+                      padding: "7px",
                       height: 37,
                       boxSizing: "border-box",
                       display: "flex",
@@ -560,9 +565,8 @@ export default function StakeCrashHistory() {
                             : "rgba(229,231,235,0.85)",
                       backdropFilter: "blur(6px)",
                     }}
-                    title={`${age}R before the next round on this page: ${multiplierKey(r.multiplier)}x. ${i === 0 ? "Wrapped from the bottom-right cell. " : ""}${formatDate(r.timestamp)}`}
+                    title={`${age}R before the next round on this page: ${multiplierKey(r.multiplier)}x. ${formatDate(r.timestamp)}`}
                   >
-                    {i === 0 && <span style={{ fontSize: 9, lineHeight: "10px", color: "#94a3b8" }}>{age}R</span>}
                     {multiplierKey(r.multiplier)}x
                   </div>
                     );
@@ -659,10 +663,6 @@ export default function StakeCrashHistory() {
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14, alignItems: "center" }}>
         <div style={{ fontSize: 12, color: "#94a3b8" }}>
           Page {pageIndex} {isLatestPage ? "(latest)" : ""}
-          {compact && <button type="button" onClick={() => setCompactRows((r) => (r === 20 ? 10 : 20))}
-            style={{ ...rowsBtnStyle, marginLeft: 8 }} title="Toggle compact rows (20/10)">
-            Rows:{compactRows}
-          </button>}
         </div>
 
         <div style={{ display: "flex", gap: 8 }}>
