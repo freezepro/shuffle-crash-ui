@@ -4,19 +4,20 @@ const { CrashAlertSound } = require("./loadTs.cjs")("crashAlertSound");
 
 function fixture() {
   let now = 100, visible = true, notes = 0, resolveResume;
+  const tones = [];
   const context = {
     state: "suspended", currentTime: 0, destination: {},
     resume: () => new Promise((resolve) => { resolveResume = () => { context.state = "running"; resolve(); }; }),
     close: async () => { context.state = "closed"; },
-    createOscillator: () => ({ frequency: {}, connect() {}, disconnect() {}, start() { notes++; }, stop() {} }),
+    createOscillator: () => ({ frequency: {}, connect() {}, disconnect() {}, start() { notes++; tones.push([this.frequency.value, this.type]); }, stop() {} }),
     createGain: () => ({ gain: { setValueAtTime() {}, linearRampToValueAtTime() {} }, connect() {}, disconnect() {} }),
   };
   const sound = new CrashAlertSound(() => context, () => visible, () => now);
-  return { sound, context, notes: () => notes, resume: () => resolveResume(),
+  return { sound, context, tones, notes: () => notes, resume: () => resolveResume(),
     time: (v) => { now = v; }, visible: (v) => { visible = v; } };
 }
 
-test("two-note chime once per round even if both conditions match", async () => {
+test("prediction-only chime stays two notes, once per round", async () => {
   const f = fixture();
   f.sound.update("301", 500);
   assert.equal(f.notes(), 0);
@@ -26,6 +27,22 @@ test("two-note chime once per round even if both conditions match", async () => 
   assert.equal(f.notes(), 2);
   f.sound.update("302", 500);
   assert.equal(f.notes(), 4);
+});
+
+test("20R uses a distinct rising chime without replaying for the same round", async () => {
+  const f = fixture();
+  f.sound.update("301", 500, false, "row20");
+  const unlocking = f.sound.unlock(); f.resume(); await unlocking;
+  assert.deepEqual(f.tones, [[1047, "triangle"], [1319, "triangle"], [1568, "triangle"]]);
+  f.sound.update("301", 500, false, "row20");
+  f.sound.update("301", 500, false, "prediction");
+  assert.equal(f.notes(), 3);
+  f.sound.update("302", 500, true, "row20");
+  assert.equal(f.notes(), 3);
+  f.sound.update("302", 500, false, "row20");
+  assert.equal(f.notes(), 6);
+  f.sound.update("303", 500, false, "prediction");
+  assert.deepEqual(f.tones.slice(-2), [[740, "sine"], [988, "sine"]]);
 });
 
 test("expired, muted, hidden, bootstrap and disconnected readings stay silent", async () => {

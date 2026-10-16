@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CrashAlertSound } from "./crashAlertSound";
+import { CrashAlertKind, CrashAlertSound } from "./crashAlertSound";
 
 const STORAGE_KEY = "shuffle_prediction_sound_muted";
 
-export function useCrashAlertSound(key: string | null, until: number) {
+export function useCrashAlertSound(key: string | null, until: number, kind: CrashAlertKind = "prediction") {
   const engine = useRef<CrashAlertSound | null>(null);
   const [muted, setMuted] = useState(false);
   const [ready, setReady] = useState(false);
@@ -37,13 +37,13 @@ export function useCrashAlertSound(key: string | null, until: number) {
       engine.current = null;
     };
   }, []);
-  useEffect(() => { engine.current?.update(key, until); }, [key, until]);
+  useEffect(() => { engine.current?.update(key, until, undefined, kind); }, [key, until, kind]);
 
   async function toggle() {
     const sound = engine.current;
     if (!sound) return;
     const nextMuted = !sound.muted && sound.ready;
-    sound.update(key, until, nextMuted);
+    sound.update(key, until, nextMuted, kind);
     setMuted(nextMuted);
     try { localStorage.setItem(STORAGE_KEY, nextMuted ? "1" : "0"); } catch { /* Storage is optional. */ }
     if (!nextMuted) await sound.unlock();

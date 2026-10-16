@@ -19,6 +19,17 @@
   white-space: nowrap;
 }
 .reading:last-child { padding-right: 10px; }
+.rowAlert {
+  border-radius: 4px;
+  animation: row20-blink 900ms ease-in-out 4;
+}
+@keyframes row20-blink {
+  0%, 100% { background-color: transparent; box-shadow: inset 0 0 0 2px transparent; }
+  40%, 60% { background-color: rgba(94, 234, 212, .22); box-shadow: inset 0 0 0 2px #5eead4; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rowAlert { animation: none; background-color: rgba(94, 234, 212, .14); box-shadow: inset 0 0 0 2px #5eead4; }
+}
 .reading strong { font-size: 23px; line-height: 26px; font-weight: 900; }
 .reading small { font-size: 16px; font-weight: 700; }
 .label { color: #b8c1ca; font-size: 12px; font-weight: 700; }
