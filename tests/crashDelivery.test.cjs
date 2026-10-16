@@ -8,6 +8,8 @@ const ts = require("typescript");
 function setup() {
   const modules = new Map(), sources = [], requests = [], timers = new Map();
   let clock = 100000, nextTimer = 0;
+  const document = new EventTarget(), window = new EventTarget();
+  document.visibilityState = "visible";
   class Source {
     static CONNECTING = 0; static OPEN = 1; static CLOSED = 2;
     readyState = 0; listeners = new Map(); closed = false;
@@ -31,7 +33,7 @@ function setup() {
     }).outputText;
     const exports = {}; modules.set(name, exports);
     vm.runInNewContext(code, {
-      exports, console, EventSource: Source, Event, AbortController, queueMicrotask,
+      exports, console, EventSource: Source, Event, AbortController, queueMicrotask, document, window,
       Date: { now: () => clock },
       setTimeout(fn, delay) { const id = ++nextTimer; timers.set(id, { fn, delay, interval: false }); return id; },
       setInterval(fn, delay) { const id = ++nextTimer; timers.set(id, { fn, delay, interval: true }); return id; },
@@ -44,7 +46,7 @@ function setup() {
     }, { filename });
     return exports;
   }
-  return { load, sources, requests, timers,
+  return { load, sources, requests, timers, document, window, advance(ms) { clock += ms; },
     tick(delay) {
       clock += delay;
       for (const [id, timer] of [...timers]) if (timer.delay === delay) {
@@ -119,14 +121,14 @@ test("missing pushes trigger a single fallback request and preserve newest-head 
   h.sources[0].emit("new_game", { gameIndex: 301 });
   h.tick(1500); assert.equal(h.requests.length, 2);
   await h.respond(1, stats(300));
-  assert.equal(seen.at(-1), null);
+  assert.equal(seen.at(-1).asOfGameIndex, 300); assert.equal(seen.at(-1).stale, true);
   h.tick(5000); await h.respond(2, stats(301));
   assert.equal(seen.at(-1).asOfGameIndex, 301); off();
 });
-test("disconnect suppresses stale stats and reconnect restores them", async () => {
+test("disconnect retains marked last-known stats and reconnect restores them", async () => {
   const h = setup(), seen = [], off = h.load("crashStats").subscribeCrashStats(x => seen.push(x));
   await h.respond(0, stats(300));
-  h.sources[0].emit("error"); assert.equal(seen.at(-1), null);
+  h.sources[0].emit("error"); assert.equal(seen.at(-1).asOfGameIndex, 300); assert.equal(seen.at(-1).stale, true);
   h.sources[0].emit("open"); await h.respond(1, stats(301));
   assert.equal(seen.at(-1).asOfGameIndex, 301); off();
 });
@@ -145,7 +147,7 @@ test("quiet streams periodically reconcile; HTTP failures can recover", async ()
   await h.respond(0, stats(300));
   for (let i = 0; i < 6; i++) h.tick(5000);
   assert.equal(h.requests.length, 2);
-  await h.respond(1, {}, false); assert.equal(seen.at(-1), null);
+  await h.respond(1, {}, false); assert.equal(seen.at(-1).asOfGameIndex, 300); assert.equal(seen.at(-1).stale, true);
   h.tick(5000); await h.respond(2, stats(302));
   assert.equal(seen.at(-1).asOfGameIndex, 302); off();
 });
@@ -155,7 +157,63 @@ test("reconnect rejects an HTTP snapshot older than the last confirmed stats", a
   await h.respond(0, stats(300));
   h.sources[0].emit("error"); h.sources[0].emit("open");
   await h.respond(1, stats(299));
-  assert.equal(seen.at(-1), null);
+  assert.equal(seen.at(-1).asOfGameIndex, 300); assert.equal(seen.at(-1).stale, true);
   h.tick(5000); await h.respond(2, stats(301));
   assert.equal(seen.at(-1).asOfGameIndex, 301); off();
+});
+
+test("returning from a hidden tab refreshes immediately without clearing numbers or duplicate requests", async () => {
+  const h = setup(), seen = [], off = h.load("crashStats").subscribeCrashStats(x => seen.push(x));
+  h.sources[0].emit("open"); await h.respond(0, stats(300));
+  h.document.visibilityState = "hidden"; h.advance(60000);
+  h.window.dispatchEvent(new Event("focus"));
+  assert.equal(h.requests.length, 1);
+  h.document.visibilityState = "visible";
+  h.document.dispatchEvent(new Event("visibilitychange"));
+  h.window.dispatchEvent(new Event("focus"));
+  h.window.dispatchEvent(new Event("pageshow"));
+  assert.equal(h.requests.length, 2);
+  assert.equal(seen.at(-1).asOfGameIndex, 300);
+  assert.equal(seen.at(-1).stale, true);
+  await h.respond(1, stats(301));
+  assert.equal(seen.at(-1).stale, false);
+  assert.equal(seen.at(-1).liveUpdate, false, "catch-up must not trigger an alert");
+  off();
+  h.advance(2000); h.window.dispatchEvent(new Event("focus"));
+  h.document.dispatchEvent(new Event("visibilitychange"));
+  assert.equal(h.requests.length, 2, "focus listeners are removed on cleanup");
+});
+test("a suspended request is aborted on resume and cannot overwrite its replacement", async () => {
+  const h = setup(), seen = [], off = h.load("crashStats").subscribeCrashStats(x => seen.push(x));
+  h.advance(60000); h.window.dispatchEvent(new Event("focus"));
+  assert.equal(h.requests[0].options.signal.aborted, true);
+  assert.equal(h.requests.length, 2);
+  await h.respond(1, stats(301));
+  await h.respond(0, stats(500));
+  assert.equal(seen.at(-1).asOfGameIndex, 301);
+  off(); assert.equal(h.timers.size, 0);
+});
+test("server invalidation keeps a stale snapshot until successful refresh", async () => {
+  const h = setup(), seen = [], off = h.load("crashStats").subscribeCrashStats(x => seen.push(x));
+  await h.respond(0, stats(300));
+  h.sources[0].emit("stats_unavailable", {});
+  assert.equal(seen.at(-1).asOfGameIndex, 300); assert.equal(seen.at(-1).stale, true);
+  h.tick(1500); await h.respond(1, stats(301));
+  assert.equal(seen.at(-1).asOfGameIndex, 301); assert.equal(seen.at(-1).stale, false);
+  off();
+});
+test("only fresh visible stream updates can request median sounds", async () => {
+  const h = setup(), seen = [], off = h.load("crashStats").subscribeCrashStats(x => seen.push(x));
+  await h.respond(0, stats(300));
+  assert.equal(seen.at(-1).liveUpdate, false);
+  h.sources[0].emit("new_game", { gameIndex: 301 }); h.sources[0].emit("stats", stats(301));
+  assert.equal(seen.at(-1).liveUpdate, true);
+  h.document.visibilityState = "hidden";
+  h.sources[0].emit("new_game", { gameIndex: 302 }); h.sources[0].emit("stats", stats(302));
+  assert.equal(seen.at(-1).liveUpdate, false);
+  h.document.visibilityState = "visible";
+  h.sources[0].emit("error");
+  h.sources[0].emit("new_game", { gameIndex: 303 }); h.sources[0].emit("stats", stats(303));
+  assert.equal(seen.at(-1).liveUpdate, false);
+  off();
 });

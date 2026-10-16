@@ -9,8 +9,10 @@ export default function LastSeenBlock() {
   const [lastSeen, setLastSeen] = useState<Record<string, number | null> | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string>("");
   const [pS2Percent, setPS2Percent] = useState<number | null>(null);
+  const [statsStale, setStatsStale] = useState(false);
 
   useEffect(() => subscribeCrashStats(data => {
+    setStatsStale(data?.stale === true);
     const value = data?.pS2_50;
     setPS2Percent(typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1
       ? Number((value * 100).toFixed(1)) : null);
@@ -79,9 +81,9 @@ export default function LastSeenBlock() {
           const val = entry.key === "2x50%" ? pS2Percent : lastSeen[entry.key];
           const isPercent = entry.key === "2x50%";
           return (
-            <div key={entry.key} style={styles.card}>
+            <div key={entry.key} style={styles.card} title={isPercent && statsStale ? "Updating stats; showing last received value" : undefined}>
               <div style={styles.label}>≥ {entry.label}</div>
-              <div style={{ ...styles.value, ...(isPercent ? { color: getPS2Color(val) } : null) }}>
+              <div style={{ ...styles.value, ...(isPercent ? { color: statsStale ? "#b8c1ca" : getPS2Color(val) } : null) }}>
                 {val === null || val === undefined ? "—" : isPercent ? `${val}%` : val}
               </div>
             </div>

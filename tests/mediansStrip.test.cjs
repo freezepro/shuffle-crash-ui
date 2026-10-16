@@ -7,8 +7,8 @@ const ts = require("typescript");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
 
-function renderStrip(medians, rate, trend = null) {
-  const states = [medians, rate, trend];
+function renderStrip(medians, rate, trend = null, stale = false) {
+  const states = [medians, rate, trend, stale];
   function load(name) {
     const base = path.join(__dirname, "../app/components", name);
     const filename = fs.existsSync(base + ".tsx") ? base + ".tsx" : base + ".ts";
@@ -70,4 +70,17 @@ test("Med 3000 is replaced by the live 20R and 10x prediction tile", () => {
   assert.match(html, /3<small>\/10<\/small>/);
   assert.match(html, />12.3%<\/strong>/);
   assert.match(html, /Enable prediction alerts/);
+});
+
+test("temporary disconnect keeps every median tile and its last numbers visible, marked as updating", () => {
+  const html = renderStrip([2.4, 2.1, 2.2, 2, 1.95], .13, null, true);
+  assert.match(html, /data-stale="true"/);
+  assert.match(html, /aria-busy="true"/);
+  assert.match(html, /Updating stats/);
+  assert.match(html, /data-pause-state="unavailable"/);
+  for (const size of [50, 100, 200, 500, 1000]) assert.ok(html.includes(`data-testid="median-${size}"`));
+  assert.ok(html.includes(">2.40x</div>"));
+  assert.ok(html.includes(">13%</div>"));
+  assert.ok(!html.includes(">—</div>"));
+  assert.ok(html.includes("color:#b8c1ca"));
 });

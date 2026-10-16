@@ -3,6 +3,7 @@
 import { subscribeCrashStats } from "../lib/crashStats";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { frequencyValue, medianPause, medianValue } from "./medianPause";
 import { MedianTrend, readMedianTrend, trendDescription } from "./medianTrend";
 import CrashPredictionTile from "./CrashPredictionTile";
@@ -14,13 +15,17 @@ export default function MediansStrip() {
   const [medians, setMedians] = useState<Array<number | null>>([]);
   const [pS10, setPS10] = useState<number | null>(null);
   const [trend, setTrend] = useState<MedianTrend | null>(null);
+  const [stale, setStale] = useState(false);
   const prevCrossOnRef = useRef(false);
+  const liveUpdateRef = useRef(false);
   const pause = medianPause(medians[0], pS10);
   const med50 = medians[0] ?? null;
   const med200 = medians[2] ?? null;
   const medCrossOn = med50 !== null && med200 !== null && med50 > med200;
 
   useEffect(() => subscribeCrashStats(data => {
+    liveUpdateRef.current = data?.liveUpdate === true;
+    setStale(data?.stale === true);
     const med = (data?.medians ?? []).map(medianValue);
     const rate = frequencyValue(data?.pS10);
     setMedians(med);
@@ -29,9 +34,10 @@ export default function MediansStrip() {
   }), []);
 
   useEffect(() => {
-    if (medCrossOn && !prevCrossOnRef.current && pause.state === "clear") playSignalTone();
+    if (stale) return;
+    if (liveUpdateRef.current && !document.hidden && medCrossOn && !prevCrossOnRef.current && pause.state === "clear") playSignalTone();
     prevCrossOnRef.current = medCrossOn;
-  }, [medCrossOn, pause.state]);
+  }, [medCrossOn, pause.state, stale]);
 
   const mapped = useMemo(() => {
     const out: Record<number, number | null> = {};
@@ -44,12 +50,14 @@ export default function MediansStrip() {
   return (
     <section
       className={predictionStyles.strip}
-      aria-label={pause.description}
-      title={pause.description}
+      aria-label={stale ? "Updating stats; showing last received values" : pause.description}
+      aria-busy={stale}
+      title={stale ? "Updating stats; showing last received values" : pause.description}
       data-testid="medians-strip"
-      data-pause-state={pause.state}
-      data-recovery-state={trend ? trend.recoveringFromLow ? "recovering" : "none" : "unavailable"}
-      style={{ ...styles.wrap, ...(pause.state === "paused" ? styles.wrapPaused : null) }}
+      data-stale={stale}
+      data-pause-state={stale ? "unavailable" : pause.state}
+      data-recovery-state={!stale && trend ? trend.recoveringFromLow ? "recovering" : "none" : "unavailable"}
+      style={{ ...styles.wrap, ...(!stale && pause.state === "paused" ? styles.wrapPaused : null) }}
     >
       <div className={predictionStyles.row}>
         {WINDOWS.map((w) => {
@@ -60,25 +68,26 @@ export default function MediansStrip() {
               data-testid={`median-${w}`}
               style={{
                 ...styles.cell,
-                ...(w === 50 && medCrossOn && pause.state === "clear" ? styles.cellCrossOn : null),
-                ...(w === 50 && pause.medianLow ? styles.cellPaused : null),
+                ...(!stale && w === 50 && medCrossOn && pause.state === "clear" ? styles.cellCrossOn : null),
+                ...(!stale && w === 50 && pause.medianLow ? styles.cellPaused : null),
               }}
             >
               <div style={styles.label}>
                 <span>Med {w}</span>
-                {w === 50 && trend && <TrendMark trend={trend} metric="med50" />}
+                {w === 50 && stale && <RefreshCw size={10} aria-label="Updating stats" />}
+                {w === 50 && !stale && trend && <TrendMark trend={trend} metric="med50" />}
               </div>
-              <div style={{ ...styles.value, color: getMedianTone(m) }}>{m == null ? "—" : `${m.toFixed(2)}x`}</div>
+              <div style={{ ...styles.value, color: stale ? "#b8c1ca" : getMedianTone(m) }}>{m == null ? "—" : `${m.toFixed(2)}x`}</div>
             </div>
           );
         })}
         <CrashPredictionTile />
-        <div data-testid="median-tail10" style={{ ...styles.cell, ...(pause.frequencyLow ? styles.cellPaused : null) }}>
+        <div data-testid="median-tail10" style={{ ...styles.cell, ...(!stale && pause.frequencyLow ? styles.cellPaused : null) }}>
           <div style={styles.label}>
             <span>10x %</span>
-            {trend && <TrendMark trend={trend} metric="tail10" />}
+            {!stale && trend && <TrendMark trend={trend} metric="tail10" />}
           </div>
-          <div style={{ ...styles.value, color: getPSColor(pS10) }}>{pS10 == null ? "—" : `${(pS10 * 100).toFixed(0)}%`}</div>
+          <div style={{ ...styles.value, color: stale ? "#b8c1ca" : getPSColor(pS10) }}>{pS10 == null ? "—" : `${(pS10 * 100).toFixed(0)}%`}</div>
         </div>
       </div>
     </section>
