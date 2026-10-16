@@ -217,3 +217,116 @@ test("only fresh visible stream updates can request median sounds", async () => 
   assert.equal(seen.at(-1).liveUpdate, false);
   off();
 });
+
+test("a stalled open connection is replaced, while regular pings keep it alive", () => {
+  const h = setup(), panel = h.load("crashEvents").openCrashStream();
+  let errors = 0, rounds = 0;
+  panel.onerror = () => errors++;
+  panel.addEventListener("new_game", () => rounds++);
+  h.sources[0].emit("open");
+  for (let i = 0; i < 8; i++) {
+    h.advance(10000); h.sources[0].emit("ping"); h.tick(5000);
+  }
+  assert.equal(h.sources.length, 1);
+  h.advance(45000); h.tick(5000);
+  assert.equal(h.sources.length, 2);
+  assert.equal(h.sources[0].closed, true); assert.equal(errors, 1);
+  h.sources[0].emit("new_game", {});
+  h.sources[1].emit("open"); h.sources[1].emit("new_game", {});
+  assert.equal(rounds, 1, "abandoned connection cannot deliver stale messages");
+  panel.close(); assert.equal(h.timers.size, 0);
+});
+
+test("tab resume reconnects a silent stream once; hidden tabs do not churn connections", () => {
+  const h = setup(), panel = h.load("crashEvents").openCrashStream();
+  h.sources[0].emit("open"); h.document.visibilityState = "hidden";
+  h.advance(60000); h.tick(5000); assert.equal(h.sources.length, 1);
+  h.document.visibilityState = "visible";
+  h.document.dispatchEvent(new Event("visibilitychange"));
+  h.window.dispatchEvent(new Event("focus")); h.window.dispatchEvent(new Event("pageshow"));
+  assert.equal(h.sources.length, 2);
+  panel.close(); h.advance(60000); h.window.dispatchEvent(new Event("focus"));
+  assert.equal(h.sources.length, 2);
+});
+
+function historyFixture() {
+  const h = setup(), requests = [], seen = [], loading = [], errors = [];
+  const off = h.load("crashHistoryFeed").subscribeCrashHistory({
+    limit: 5,
+    load: signal => new Promise((resolve, reject) => requests.push({ signal, resolve, reject })),
+    parse: raw => raw && Number.isSafeInteger(raw.gameNumber) ? raw : null,
+    onRows: rows => seen.push(rows), onLoading: value => loading.push(value), onError: error => errors.push(error),
+  });
+  return { ...h, historyRequests: requests, seen, loading, errors, off,
+    async respondHistory(index, head) {
+      requests[index].resolve(Array.from({ length: 5 }, (_, i) => ({ gameNumber: head - i })));
+      await flush();
+    },
+    ids() { return Array.from(seen.at(-1) || [], row => row.gameNumber); },
+  };
+}
+
+test("history listens before bootstrap and never overwrites a round with a late HTTP snapshot", async () => {
+  const h = historyFixture(); h.sources[0].emit("open");
+  assert.equal(h.historyRequests.length, 1);
+  h.sources[0].emit("new_game", { gameNumber: 301 });
+  assert.deepEqual(h.ids(), [301], "round is displayed without waiting for the database");
+  await h.respondHistory(0, 300);
+  assert.deepEqual(h.ids(), [301, 300, 299, 298, 297]);
+  h.sources[0].emit("new_game", { gameNumber: 302 });
+  h.sources[0].emit("new_game", { gameNumber: 302 });
+  h.sources[0].emit("new_game", { gameNumber: 299 });
+  assert.deepEqual(h.ids(), [302, 301, 300, 299, 298]);
+  assert.equal(h.historyRequests.length, 1, "healthy live rounds need no HTTP request");
+  h.off(); assert.equal(h.timers.size, 0);
+});
+
+test("history reconnect and tab resume fetch missed rounds without waiting for another round", async () => {
+  const h = historyFixture(); h.sources[0].emit("open"); await h.respondHistory(0, 300);
+  h.advance(2000); h.sources[0].emit("error"); h.sources[0].emit("open");
+  assert.equal(h.historyRequests.length, 2);
+  assert.equal(h.ids()[0], 300, "last known rows remain visible");
+  await h.respondHistory(1, 303); assert.equal(h.ids()[0], 303);
+  h.document.visibilityState = "hidden"; h.advance(60000);
+  h.window.dispatchEvent(new Event("focus")); assert.equal(h.historyRequests.length, 2);
+  h.document.visibilityState = "visible";
+  h.document.dispatchEvent(new Event("visibilitychange")); h.window.dispatchEvent(new Event("focus"));
+  assert.equal(h.historyRequests.length, 3);
+  await h.respondHistory(2, 307); assert.equal(h.ids()[0], 307);
+  h.off();
+});
+
+test("history repairs event gaps and retries if the first database snapshot is still behind", async () => {
+  const h = historyFixture(); h.sources[0].emit("open"); await h.respondHistory(0, 300);
+  h.sources[0].emit("new_game", { gameNumber: 304 });
+  assert.equal(h.ids()[0], 304);
+  await h.respondHistory(1, 302);
+  h.tick(3000); assert.equal(h.historyRequests.length, 3);
+  h.sources[0].emit("new_game", { gameNumber: 305 });
+  await h.respondHistory(2, 304);
+  assert.deepEqual(h.ids(), [305, 304, 303, 302, 301]); h.off();
+});
+
+test("history timeout, failed fetch and cleanup do not strand or overwrite the live grid", async () => {
+  const h = historyFixture(); h.sources[0].emit("open");
+  h.tick(10000); assert.equal(h.historyRequests[0].signal.aborted, true);
+  h.tick(3000); assert.equal(h.historyRequests.length, 2);
+  h.historyRequests[1].reject(new Error("offline")); await flush();
+  assert.equal(h.errors.length, 1);
+  h.tick(3000); await h.respondHistory(2, 300);
+  await h.respondHistory(0, 999); assert.equal(h.ids()[0], 300);
+  h.advance(2000); h.window.dispatchEvent(new Event("focus"));
+  h.off(); assert.equal(h.historyRequests[3].signal.aborted, true);
+  await h.respondHistory(3, 1000); assert.equal(h.ids()[0], 300);
+  assert.equal(h.timers.size, 0);
+});
+
+test("history uses a bounded fallback during disconnect and stops polling after reconnect", async () => {
+  const h = historyFixture(); h.sources[0].emit("open"); await h.respondHistory(0, 300);
+  h.sources[0].emit("error"); h.tick(10000);
+  assert.equal(h.historyRequests.length, 2);
+  await h.respondHistory(1, 302); assert.equal(h.ids()[0], 302);
+  h.sources[0].emit("open"); await h.respondHistory(2, 302);
+  h.tick(10000); assert.equal(h.historyRequests.length, 3);
+  h.off();
+});

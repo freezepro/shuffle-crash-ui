@@ -12,7 +12,7 @@ function renderHistory(values, rowCount = 20) {
   const rows = values.map((multiplier, i) => ({
     multiplier, gameNumber: 300 - i, timestamp: "2026-10-01T12:00:00.000Z",
   }));
-  const states = [rows, 0, false, true, rowCount, true, rows[0]?.multiplier ?? null];
+  const states = [rows, 0, false, true, rowCount, rows[0]?.multiplier ?? null];
   const filename = path.join(__dirname, "../app/components/StakeCrashHistory.tsx");
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
@@ -22,7 +22,7 @@ function renderHistory(values, rowCount = 20) {
       useState: () => [states.shift(), () => {}], useEffect() {}, useMemo: fn => fn(),
       useCallback: fn => fn, useRef: value => ({ current: value }) };
     if (id === "../lib/apiBase") return { apiUrl: value => value };
-    if (id === "../lib/crashEvents") return { openCrashStream() {} };
+    if (id === "../lib/crashHistoryFeed") return { subscribeCrashHistory() {} };
     return require(id);
   }};
   vm.runInNewContext(code, context, { filename });

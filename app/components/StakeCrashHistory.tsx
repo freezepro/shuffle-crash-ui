@@ -1,6 +1,6 @@
 "use client";
 
-import { openCrashStream } from "../lib/crashEvents";
+import { subscribeCrashHistory } from "../lib/crashHistoryFeed";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiUrl } from "../lib/apiBase";
@@ -209,21 +209,15 @@ export default function StakeCrashHistory() {
   const [compactRows, setCompactRows] = useState(20);
 
   const pageSize = compact ? COMPACT_COLS * compactRows : PAGE_SIZE_NORMAL;
+  const isLatestPage = pageIndex === 0;
 
-  // SSE only after first HTTP load
-  const [bootstrapped, setBootstrapped] = useState(false);
-
-  // protect from duplicates / old events
-  const latestGameRef = useRef<number>(0);
   const latestMultiplierRef = useRef<number | null>(null);
   const [latestMultiplier, setLatestMultiplier] = useState<number | null>(null);
 
 
-  const isLatestPage = pageIndex === 0;
-
-  const fetchPage = useCallback(async (page: number, limit: number) => {
+  const fetchPage = useCallback(async (page: number, limit: number, signal?: AbortSignal) => {
     const url = buildUrl(page, limit);
-    const res = await fetch(url);
+    const res = await fetch(url, { signal, cache: "no-store" });
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
@@ -242,32 +236,37 @@ export default function StakeCrashHistory() {
       .filter(Boolean) as CrashRow[];
   }, []);
 
-  // HTTP bootstrap + pagination
+  // Listen before the first fetch, and reconcile missed rounds on reconnect/resume.
   useEffect(() => {
+    if (pageIndex === 0) {
+      return subscribeCrashHistory({
+        limit: pageSize,
+        load: signal => fetchPage(0, pageSize, signal),
+        parse: normalizeRow,
+        onRows: data => {
+          setRows(data);
+          if (data.length) {
+            latestMultiplierRef.current = data[0].multiplier;
+            setLatestMultiplier(data[0].multiplier);
+          }
+        },
+        onLoading: setIsLoading,
+        onError: error => console.error("Crash history refresh failed", error),
+      });
+    }
     let cancelled = false;
+    const controller = new AbortController();
 
     (async () => {
       try {
         setIsLoading(true);
 
-        const data = await fetchPage(pageIndex, pageSize);
+        const data = await fetchPage(pageIndex, pageSize, controller.signal);
         if (cancelled) return;
 
         setRows(data);
-
-        if (pageIndex === 0 && data.length) {
-          latestMultiplierRef.current = data[0].multiplier; // newest on latest page
-          setLatestMultiplier(data[0].multiplier);
-        }
-
-        // latestGameRef for SSE
-        if (pageIndex === 0 && data.length) {
-          latestGameRef.current = Math.max(...data.map((r) => r.gameNumber));
-        }
-
-        setBootstrapped(true);
       } catch (e) {
-        console.error("❌ fetch history error", e);
+        if (!cancelled) console.error("❌ fetch history error", e);
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -275,56 +274,9 @@ export default function StakeCrashHistory() {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [pageIndex, pageSize, fetchPage]);
-
-  // SSE only on latest page + after bootstrap
-  useEffect(() => {
-    if (!isLatestPage) return;
-    if (!bootstrapped) return;
-
-    const es = openCrashStream();
-
-    es.addEventListener("new_game", (e) => {
-      try {
-        const raw = JSON.parse((e as MessageEvent).data);
-        const row = normalizeRow(raw);
-        if (!row) return;
-
-        if (row.gameNumber <= latestGameRef.current) return;
-        latestGameRef.current = row.gameNumber;
-        latestMultiplierRef.current = row.multiplier;
-        setLatestMultiplier(row.multiplier);
-
-        setRows((prev) => {
-          const merged = [row, ...prev];
-
-          // dedupe by gameNumber + trim to current pageSize
-          const uniq: CrashRow[] = [];
-          const seen = new Set<number>();
-
-          for (const r of merged) {
-            if (seen.has(r.gameNumber)) continue;
-            seen.add(r.gameNumber);
-            uniq.push(r);
-            if (uniq.length >= pageSize) break;
-          }
-
-          return uniq;
-        });
-      } catch (err) {
-        console.error("❌ SSE parse error", err);
-      }
-    });
-
-    es.onerror = (err) => {
-      console.error("❌ SSE error", err);
-    };
-
-    return () => {
-      es.close();
-    };
-  }, [isLatestPage, bootstrapped, pageSize]);
 
   const first = rows[rows.length - 1]?.gameNumber ?? "-"; // oldest on page
   const last = rows[0]?.gameNumber ?? "-";               // newest on page
