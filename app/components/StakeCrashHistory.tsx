@@ -3,6 +3,7 @@
 import { subscribeCrashHistory } from "../lib/crashHistoryFeed";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { apiUrl } from "../lib/apiBase";
 
 type CrashRow = {
@@ -243,12 +244,17 @@ export default function StakeCrashHistory() {
         limit: pageSize,
         load: signal => fetchPage(0, pageSize, signal),
         parse: normalizeRow,
-        onRows: data => {
-          setRows(data);
-          if (data.length) {
-            latestMultiplierRef.current = data[0].multiplier;
-            setLatestMultiplier(data[0].multiplier);
-          }
+        onRows: (data, liveEvent) => {
+          const updateGrid = () => {
+            setRows(data);
+            if (data.length) {
+              latestMultiplierRef.current = data[0].multiplier;
+              setLatestMultiplier(data[0].multiplier);
+            }
+          };
+          // Commit live numbers before any deferred predictor/chart work begins.
+          if (liveEvent) flushSync(updateGrid);
+          else updateGrid();
         },
         onLoading: setIsLoading,
         onError: error => console.error("Crash history refresh failed", error),

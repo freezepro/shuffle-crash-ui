@@ -7,23 +7,61 @@ type StreamHandle = {
   close: () => void;
 };
 const eventTypes = ["open", "error", "ping", "new_game", "stats", "stats_unavailable"];
-const handles = new Set<{ listeners: Map<string, Set<EventListener>>; handle: StreamHandle }>();
+const handles = new Set<{ listeners: Map<string, Set<EventListener>>; handle: StreamHandle; afterPaint: boolean }>();
 let source: EventSource | null = null;
 let lastContact = 0;
 let stopHealthCheck: (() => void) | null = null;
+let deferred: Array<() => void> = [];
+let paintFrame: number | null = null;
+let paintTask: ReturnType<typeof setTimeout> | null = null;
+let paintFallback: ReturnType<typeof setTimeout> | null = null;
+
+function clearDeferred() {
+  if (paintFrame !== null) cancelAnimationFrame(paintFrame);
+  if (paintTask !== null) clearTimeout(paintTask);
+  if (paintFallback !== null) clearTimeout(paintFallback);
+  paintFrame = paintTask = paintFallback = null;
+  deferred = [];
+}
+
+function afterGridPaint(callbacks: Array<() => void>) {
+  deferred.push(...callbacks);
+  if (paintFallback !== null) return;
+  const flush = () => {
+    const pending = deferred;
+    clearDeferred();
+    for (const callback of pending) callback();
+  };
+  // The frame itself runs before paint; a following task leaves room for the grid.
+  paintFrame = requestAnimationFrame(() => {
+    paintFrame = null;
+    paintTask = setTimeout(flush, 0);
+  });
+  // Hidden tabs may suspend frames. Still process every round, in order.
+  paintFallback = setTimeout(flush, 100);
+}
 
 function dispatch(type: string, event: Event) {
+  if (type === "error") clearDeferred();
+  const later: Array<() => void> = [];
   for (const subscriber of [...handles]) {
     if (!handles.has(subscriber)) continue;
     const callbacks = [...(subscriber.listeners.get(type) || [])];
     if (type === "error" && subscriber.handle.onerror) callbacks.push(subscriber.handle.onerror);
-    for (const callback of callbacks) {
-      try { callback(event); } catch (error) { console.error("Crash stream subscriber failed", error); }
-    }
+    const deliver = () => {
+      if (!handles.has(subscriber)) return;
+      for (const callback of callbacks) {
+        try { callback(event); } catch (error) { console.error("Crash stream subscriber failed", error); }
+      }
+    };
+    if (subscriber.afterPaint && ["new_game", "stats", "stats_unavailable"].includes(type)) later.push(deliver);
+    else deliver();
   }
+  if (later.length && handles.size) afterGridPaint(later);
 }
 
 function connect() {
+  clearDeferred();
   source?.close();
   const current = new EventSource(apiUrl("/api/stream"));
   source = current;
@@ -57,7 +95,7 @@ function startHealthCheck() {
 }
 
 // Each panel owns a subscription, but all panels share one network connection.
-export function openCrashStream(): StreamHandle {
+export function openCrashStream({ afterPaint = false } = {}): StreamHandle {
   const listeners = new Map<string, Set<EventListener>>();
   const handle: StreamHandle = {
     onerror: null,
@@ -77,11 +115,12 @@ export function openCrashStream(): StreamHandle {
       listeners.clear();
       if (!handles.size) {
         source?.close(); source = null;
+        clearDeferred();
         stopHealthCheck?.(); stopHealthCheck = null;
       }
     },
   };
-  const entry = { listeners, handle };
+  const entry = { listeners, handle, afterPaint };
   handles.add(entry);
   if (!source) {
     connect();

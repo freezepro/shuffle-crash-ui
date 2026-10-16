@@ -224,7 +224,7 @@ export default function CrashDashboard() {
     if (pageIndex !== 0) return;
 
     console.log("📡 SSE connect");
-    const es = openCrashStream();
+    const es = openCrashStream({ afterPaint: true });
 
     es.addEventListener("new_game", (e) => {
       const g = JSON.parse((e as MessageEvent).data);

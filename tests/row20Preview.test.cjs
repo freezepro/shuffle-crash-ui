@@ -8,7 +8,7 @@ const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { estimateCrash } = require("./loadTs.cjs")("crashPrediction");
 
-function renderHistory(values, rowCount = 20) {
+function renderHistory(values, rowCount = 20, hooks = {}) {
   const rows = values.map((multiplier, i) => ({
     multiplier, gameNumber: 300 - i, timestamp: "2026-10-01T12:00:00.000Z",
   }));
@@ -19,10 +19,12 @@ function renderHistory(values, rowCount = 20) {
   }).outputText;
   const context = { exports: {}, require(id) {
     if (id === "react") return { ...React, default: React,
-      useState: () => [states.shift(), () => {}], useEffect() {}, useMemo: fn => fn(),
+      useState: () => [states.shift(), value => hooks.onState?.(value)],
+      useEffect: effect => hooks.effects?.push(effect), useMemo: fn => fn(),
       useCallback: fn => fn, useRef: value => ({ current: value }) };
+    if (id === "react-dom") return { flushSync: callback => hooks.flushSync ? hooks.flushSync(callback) : callback() };
     if (id === "../lib/apiBase") return { apiUrl: value => value };
-    if (id === "../lib/crashHistoryFeed") return { subscribeCrashHistory() {} };
+    if (id === "../lib/crashHistoryFeed") return { subscribeCrashHistory: options => hooks.subscribe?.(options) };
     return require(id);
   }};
   vm.runInNewContext(code, context, { filename });
@@ -77,4 +79,21 @@ test("empty history preserves preview positions without inventing matches", () =
   const cells = previews(renderHistory([]));
   assert.equal(cells.length, 9);
   assert.ok(cells.every(cell => !cell.includes("data-pattern-hit")));
+});
+
+test("live grid rows and anchor commit synchronously, unlike HTTP catch-up", () => {
+  const effects = [], writes = []; let feed, committing = false;
+  renderHistory([2], 20, {
+    effects, subscribe: options => { feed = options; },
+    onState: value => writes.push({ value, committing }),
+    flushSync: callback => { committing = true; callback(); committing = false; },
+  });
+  effects[0]();
+  const rows = [{ gameNumber: 301, multiplier: 14.85, timestamp: "2026-10-16T12:00:00Z" }];
+  feed.onRows(rows, true);
+  assert.equal(writes.length, 2);
+  assert.equal(writes[0].value, rows); assert.equal(writes[1].value, 14.85);
+  assert.ok(writes.every(write => write.committing));
+  writes.length = 0; feed.onRows(rows, false);
+  assert.ok(writes.every(write => !write.committing));
 });

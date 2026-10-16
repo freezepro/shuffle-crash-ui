@@ -8,7 +8,7 @@ export function subscribeCrashHistory<T extends Row>({
   limit: number;
   load: (signal: AbortSignal) => Promise<T[]>;
   parse: (raw: unknown) => T | null;
-  onRows: (rows: T[]) => void;
+  onRows: (rows: T[], liveEvent: boolean) => void;
   onLoading: (loading: boolean) => void;
   onError: (error: unknown) => void;
 }) {
@@ -18,12 +18,12 @@ export function subscribeCrashHistory<T extends Row>({
   let retry: ReturnType<typeof setTimeout> | undefined;
   const stream = openCrashStream();
 
-  function publish(incoming: T[]) {
+  function publish(incoming: T[], liveEvent = false) {
     // Live arrivals take precedence over a snapshot started before those arrivals.
     const merged = new Map(incoming.map(row => [row.gameNumber, row]));
     for (const row of rows) merged.set(row.gameNumber, row);
     rows = [...merged.values()].sort((a, b) => b.gameNumber - a.gameNumber).slice(0, limit);
-    onRows(rows);
+    onRows(rows, liveEvent);
   }
 
   async function refresh() {
@@ -65,7 +65,7 @@ export function subscribeCrashHistory<T extends Row>({
       const row = parse(JSON.parse((event as MessageEvent).data));
       if (!row || row.gameNumber <= (rows[0]?.gameNumber ?? 0)) return;
       const gap = rows.length > 0 && row.gameNumber > rows[0].gameNumber + 1;
-      publish([row]);
+      publish([row], true);
       if (gap) void refresh();
     } catch (error) { onError(error); }
   });

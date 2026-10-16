@@ -80,7 +80,7 @@ export default function StakeLiveUpPanel({ active = true }: { active?: boolean }
 
   useEffect(() => {
     if (!active || page !== 1) return;
-    const es = openCrashStream();
+    const es = openCrashStream({ afterPaint: true });
 
     es.addEventListener("new_game", () => {
       const now = Date.now();

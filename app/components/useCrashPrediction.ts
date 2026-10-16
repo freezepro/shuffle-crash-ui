@@ -19,7 +19,7 @@ export function useCrashPrediction(): Reading {
     let request: AbortController | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let lastContact = Date.now();
-    const source = openCrashStream();
+    const source = openCrashStream({ afterPaint: true });
 
     function publish(rounds: CrashRound[], liveEvent = false) {
       history = rounds;

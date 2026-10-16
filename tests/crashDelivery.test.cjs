@@ -5,11 +5,21 @@ const test = require("node:test");
 const vm = require("node:vm");
 const ts = require("typescript");
 
-function setup() {
-  const modules = new Map(), sources = [], requests = [], timers = new Map();
+function setup({ autoPaint = true } = {}) {
+  const modules = new Map(), sources = [], requests = [], timers = new Map(), frames = new Map();
   let clock = 100000, nextTimer = 0;
   const document = new EventTarget(), window = new EventTarget();
   document.visibilityState = "visible";
+  function frame() {
+    const pending = [...frames.values()]; frames.clear();
+    for (const fn of pending) fn();
+  }
+  function paint() {
+    frame();
+    for (const [id, timer] of [...timers]) if (timer.delay === 0) {
+      timers.delete(id); timer.fn();
+    }
+  }
   class Source {
     static CONNECTING = 0; static OPEN = 1; static CLOSED = 2;
     readyState = 0; listeners = new Map(); closed = false;
@@ -22,6 +32,7 @@ function setup() {
       if (type === "open") this.readyState = 1;
       if (type === "error") this.readyState = 0;
       for (const fn of this.listeners.get(type) || []) fn({ type, data: JSON.stringify(value) });
+      if (autoPaint) paint();
     }
     close() { this.closed = true; this.readyState = 2; }
   }
@@ -35,6 +46,8 @@ function setup() {
     vm.runInNewContext(code, {
       exports, console, EventSource: Source, Event, AbortController, queueMicrotask, document, window,
       Date: { now: () => clock },
+      requestAnimationFrame(fn) { const id = ++nextTimer; frames.set(id, fn); return id; },
+      cancelAnimationFrame(id) { frames.delete(id); },
       setTimeout(fn, delay) { const id = ++nextTimer; timers.set(id, { fn, delay, interval: false }); return id; },
       setInterval(fn, delay) { const id = ++nextTimer; timers.set(id, { fn, delay, interval: true }); return id; },
       clearTimeout(id) { timers.delete(id); }, clearInterval(id) { timers.delete(id); },
@@ -46,7 +59,7 @@ function setup() {
     }, { filename });
     return exports;
   }
-  return { load, sources, requests, timers, document, window, advance(ms) { clock += ms; },
+  return { load, sources, requests, timers, frames, frame, paint, document, window, advance(ms) { clock += ms; },
     tick(delay) {
       clock += delay;
       for (const [id, timer] of [...timers]) if (timer.delay === delay) {
@@ -329,4 +342,68 @@ test("history uses a bounded fallback during disconnect and stops polling after 
   h.sources[0].emit("open"); await h.respondHistory(2, 302);
   h.tick(10000); assert.equal(h.historyRequests.length, 3);
   h.off();
+});
+
+test("grid updates first even when predictor and charts subscribed before it", () => {
+  const h = setup({ autoPaint: false }), api = h.load("crashEvents"), order = [];
+  const predictor = api.openCrashStream({ afterPaint: true });
+  const chart = api.openCrashStream({ afterPaint: true });
+  const grid = api.openCrashStream();
+  predictor.addEventListener("new_game", () => order.push("predictor"));
+  chart.addEventListener("new_game", () => order.push("chart"));
+  predictor.addEventListener("stats", () => order.push("medians"));
+  grid.addEventListener("new_game", () => order.push("grid"));
+  h.sources[0].emit("new_game", { gameIndex: 301 });
+  h.sources[0].emit("stats", stats(301));
+  assert.deepEqual(order, ["grid"], "no calculation runs in the grid's event turn");
+  h.frame();
+  assert.deepEqual(order, ["grid"], "frame callbacks must not start calculations before paint");
+  order.push("paint"); h.tick(0);
+  assert.deepEqual(order, ["grid", "paint", "predictor", "chart", "medians"]);
+  predictor.close(); chart.close(); grid.close();
+  assert.equal(h.frames.size, 0); assert.equal(h.timers.size, 0);
+});
+
+test("deferred round and stats events retain order without dropping burst arrivals", () => {
+  const h = setup({ autoPaint: false }), seen = [];
+  const panel = h.load("crashEvents").openCrashStream({ afterPaint: true });
+  for (const type of ["new_game", "stats", "stats_unavailable"]) {
+    panel.addEventListener(type, event => seen.push([type, JSON.parse(event.data).head]));
+  }
+  for (const head of [301, 302, 303]) {
+    h.sources[0].emit("new_game", { head }); h.sources[0].emit("stats", { head });
+  }
+  h.sources[0].emit("stats_unavailable", { head: 303 });
+  assert.equal(seen.length, 0); assert.equal(h.frames.size, 1);
+  h.paint();
+  assert.deepEqual(seen, [
+    ["new_game", 301], ["stats", 301], ["new_game", 302], ["stats", 302],
+    ["new_game", 303], ["stats", 303], ["stats_unavailable", 303],
+  ]);
+  panel.close();
+});
+
+test("hidden-tab fallback processes queued rounds once even without animation frames", () => {
+  const h = setup({ autoPaint: false }); let count = 0;
+  h.document.visibilityState = "hidden";
+  const panel = h.load("crashEvents").openCrashStream({ afterPaint: true });
+  panel.addEventListener("new_game", () => count++);
+  h.sources[0].emit("new_game", {});
+  h.tick(100); assert.equal(count, 1); assert.equal(h.frames.size, 0);
+  h.paint(); assert.equal(count, 1); panel.close();
+});
+
+test("disconnect and unsubscribe cancel deferred work instead of replaying stale forecasts", () => {
+  const h = setup({ autoPaint: false }), api = h.load("crashEvents"); let rounds = 0, errors = 0;
+  const first = api.openCrashStream({ afterPaint: true }), second = api.openCrashStream({ afterPaint: true });
+  first.addEventListener("new_game", () => rounds++);
+  second.addEventListener("new_game", () => rounds++);
+  second.onerror = () => errors++;
+  h.sources[0].emit("new_game", {}); h.sources[0].emit("error");
+  assert.equal(errors, 1); h.paint(); h.tick(100); assert.equal(rounds, 0);
+  h.sources[0].emit("open"); h.sources[0].emit("new_game", {});
+  first.close(); h.paint(); assert.equal(rounds, 1);
+  h.sources[0].emit("new_game", {}); second.close();
+  h.paint(); h.tick(100); assert.equal(rounds, 1);
+  assert.equal(h.frames.size, 0); assert.equal(h.timers.size, 0);
 });

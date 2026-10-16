@@ -30,7 +30,7 @@ function markStale() {
 }
 
 function start() {
-  const stream = openCrashStream();
+  const stream = openCrashStream({ afterPaint: true });
   let active = true, revision = 0, requiredHead = -1, lastUpdated = 0, lastAttempt = -Infinity;
   let request: AbortController | null = null;
   let lastResume = -Infinity, lastRound = -1;
