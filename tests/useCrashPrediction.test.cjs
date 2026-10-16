@@ -11,8 +11,51 @@ const rounds = (last = 300) => Array.from({ length: 300 }, (_, i) => ({
 }));
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-function fixture() {
-  let reading, source, cleanup, calls = 0, respond = async () => ({ success: true, rounds: rounds() });
+test("prediction bootstrap works without stream open and remains silent", async () => {
+  const f = fixture();
+  await flush();
+  assert.equal(f.calls(), 1);
+  assert.equal(f.reading().estimate.gameIndex, 300);
+  assert.equal(f.reading().status, "connecting");
+  assert.equal(f.reading().alertUntil, 0);
+  f.cleanup();
+});
+
+test("reload shows a cached estimate while HTTP is pending; fresh history replaces it silently", async () => {
+  const cache = new Map();
+  const first = fixture({ cache }); first.source.emit("open"); await flush(); first.cleanup();
+  let release;
+  const f = fixture({ cache, response: () => new Promise(resolve => { release = resolve; }) });
+  assert.equal(f.reading().estimate.gameIndex, 300);
+  assert.equal(f.reading().status, "connecting"); assert.equal(f.reading().alertUntil, 0);
+  f.source.emit("open");
+  release({ success: true, rounds: rounds(302) }); await flush();
+  assert.equal(f.reading().estimate.gameIndex, 302);
+  assert.equal(f.reading().status, "live"); assert.equal(f.reading().alertUntil, 0);
+  f.cleanup();
+});
+
+test("disconnect keeps the last estimate and HTTP still recovers without a new event", async () => {
+  const f = fixture(); f.source.emit("open"); await flush();
+  let release;
+  f.respond(() => new Promise(resolve => { release = resolve; }));
+  f.source.emit("error");
+  assert.equal(f.reading().estimate.gameIndex, 300); assert.equal(f.reading().alertUntil, 0);
+  release({ success: true, rounds: rounds(302) }); await flush();
+  assert.equal(f.reading().estimate.gameIndex, 302);
+  assert.equal(f.reading().status, "connecting"); assert.equal(f.reading().alertUntil, 0);
+  f.cleanup();
+});
+
+test("invalid cached estimates are ignored instead of rendering fabricated numbers", async () => {
+  const cache = new Map([["prediction", { probability: 3, rowMatches: 14, gameIndex: 300 }]]);
+  const f = fixture({ cache, response: async () => ({ success: false }) });
+  assert.equal(f.reading().estimate, null);
+  await flush(); f.cleanup();
+});
+
+function fixture({ cache = new Map(), response = async () => ({ success: true, rounds: rounds() }) } = {}) {
+  let reading, source, cleanup, calls = 0, respond = response;
   const timers = new Map();
   class Source {
     static OPEN = 1;
@@ -40,6 +83,10 @@ function fixture() {
         useEffect(effect) { cleanup = effect(); },
       };
       if (id === "./crashPrediction") return prediction;
+      if (id === "../lib/lastKnown") return {
+        readLastKnown: (name, decode) => decode(cache.get(name)),
+        saveLastKnown: (name, value) => cache.set(name, value),
+      };
       if (id === "../lib/apiBase") return { API_BASE: "https://shuffle.test" };
       if (id === "../lib/crashEvents") return { openCrashStream: () => new Source("https://shuffle.test/api/stream") };
       throw new Error(`Unexpected import: ${id}`);
@@ -68,13 +115,13 @@ test("Shuffle loads once and updates immediately for each live round", async () 
   f.cleanup(); assert.equal(f.source.readyState, 2);
 });
 
-test("missing rounds pause the estimate and alert until a complete resync", async () => {
+test("missing rounds retain the last estimate with alerts paused until a complete resync", async () => {
   const f = fixture(); f.source.emit("open"); await flush();
   let release;
   f.respond(() => new Promise(resolve => { release = resolve; }));
   f.round(304);
   assert.equal(f.reading().status, "syncing");
-  assert.equal(f.reading().estimate, null);
+  assert.equal(f.reading().estimate.gameIndex, 300);
   assert.equal(f.reading().alertUntil, 0);
   f.round(305);
   release({ success: true, rounds: rounds(304) }); await flush();
@@ -82,13 +129,12 @@ test("missing rounds pause the estimate and alert until a complete resync", asyn
   assert.equal(f.reading().alertUntil, 0, "catch-up is silent");
   f.source.emit("error");
   assert.equal(f.reading().status, "connecting");
-  assert.equal(f.reading().estimate, null);
+  assert.equal(f.reading().estimate.gameIndex, 305);
   f.cleanup();
 });
 
-test("failed snapshots retry without presenting stale predictions", async () => {
-  const f = fixture();
-  f.respond(async () => ({ success: false }));
+test("failed snapshots retry without inventing an estimate", async () => {
+  const f = fixture({ response: async () => ({ success: false }) });
   f.source.emit("open"); await flush();
   assert.equal(f.reading().status, "syncing");
   assert.equal(f.reading().estimate, null);

@@ -77,7 +77,7 @@ export default function MediansStrip() {
                 {w === 50 && stale && <RefreshCw size={10} aria-label="Updating stats" />}
                 {w === 50 && !stale && trend && <TrendMark trend={trend} metric="med50" />}
               </div>
-              <div style={{ ...styles.value, color: stale ? "#b8c1ca" : getMedianTone(m) }}>{m == null ? "—" : `${m.toFixed(2)}x`}</div>
+              <div style={{ ...styles.value, color: getMedianTone(m) }}>{m == null ? "—" : `${m.toFixed(2)}x`}</div>
             </div>
           );
         })}
@@ -87,7 +87,7 @@ export default function MediansStrip() {
             <span>10x %</span>
             {!stale && trend && <TrendMark trend={trend} metric="tail10" />}
           </div>
-          <div style={{ ...styles.value, color: stale ? "#b8c1ca" : getPSColor(pS10) }}>{pS10 == null ? "—" : `${(pS10 * 100).toFixed(0)}%`}</div>
+          <div style={{ ...styles.value, color: getPSColor(pS10) }}>{pS10 == null ? "—" : `${(pS10 * 100).toFixed(0)}%`}</div>
         </div>
       </div>
     </section>

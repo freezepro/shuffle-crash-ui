@@ -82,5 +82,7 @@ test("temporary disconnect keeps every median tile and its last numbers visible,
   assert.ok(html.includes(">2.40x</div>"));
   assert.ok(html.includes(">13%</div>"));
   assert.ok(!html.includes(">—</div>"));
-  assert.ok(html.includes("color:#b8c1ca"));
+  assert.ok(!html.includes("color:#b8c1ca"));
+  assert.ok(html.includes("color:#22c55e"));
+  assert.ok(html.includes("color:#f59e0b"));
 });

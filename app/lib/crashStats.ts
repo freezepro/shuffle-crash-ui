@@ -1,5 +1,7 @@
 import { apiUrl } from "./apiBase";
 import { openCrashStream } from "./crashEvents";
+import { readLastKnown, saveLastKnown } from "./lastKnown";
+import { medianValue, frequencyValue } from "../components/medianPause";
 
 export type CrashStats = {
   success: true;
@@ -17,11 +19,16 @@ let snapshot: CrashStats | null = null;
 let stop: (() => void) | null = null;
 
 function readStats(value: any): CrashStats | null {
-  return value?.success === true && Array.isArray(value.medians)
-    ? { ...value, stale: false, liveUpdate: false } : null;
+  const medians = Array.isArray(value?.medians) ? value.medians.map(medianValue) : [];
+  const pS10 = frequencyValue(value?.pS10);
+  return value?.success === true && medians.length >= 5 && medians.length <= 6
+    && medians.every((median: number | null) => median !== null) && pS10 !== null
+    && (value.asOfGameIndex == null || Number.isSafeInteger(value.asOfGameIndex) && value.asOfGameIndex >= 0)
+    ? { ...value, medians, pS10, stale: false, liveUpdate: false } : null;
 }
 function publish(value: CrashStats | null) {
   snapshot = value;
+  if (value && !value.stale) saveLastKnown("stats", value);
   for (const listener of listeners) listener(value);
 }
 
@@ -49,7 +56,13 @@ function start() {
       if (!response.ok) throw new Error("Stats unavailable");
       const value = readStats(await response.json());
       if (!active || controller.signal.aborted || revision !== version) return;
-      if (!value || !isCurrent(value)) throw new Error("Stats behind latest round");
+      if (!value) throw new Error("Stats unavailable");
+      if (!isCurrent(value)) {
+        if (!snapshot || (value.asOfGameIndex ?? -1) > (snapshot.asOfGameIndex ?? -1)) {
+          publish({ ...value, stale: true, liveUpdate: false });
+        }
+        throw new Error("Stats behind latest round");
+      }
       requiredHead = Math.max(requiredHead, value.asOfGameIndex ?? -1);
       lastUpdated = Date.now();
       publish(value);
@@ -94,7 +107,6 @@ function start() {
     fallback = setTimeout(() => { void refresh(); }, 1500);
   });
   stream.onerror = () => {
-    revision++;
     lastUpdated = 0;
     markStale();
   };
@@ -132,11 +144,15 @@ function start() {
     window.removeEventListener("pageshow", resume);
     request?.abort();
     stream.close();
-    snapshot = null;
+    if (snapshot) snapshot = { ...snapshot, stale: true, liveUpdate: false };
   };
 }
 
 export function subscribeCrashStats(listener: Listener) {
+  if (!stop && !snapshot) {
+    const saved = readLastKnown("stats", readStats);
+    if (saved) snapshot = { ...saved, stale: true, liveUpdate: false };
+  }
   listeners.add(listener);
   listener(snapshot);
   if (!stop) stop = start();

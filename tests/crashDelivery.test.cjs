@@ -5,11 +5,12 @@ const test = require("node:test");
 const vm = require("node:vm");
 const ts = require("typescript");
 
-function setup({ autoPaint = true } = {}) {
+function setup({ autoPaint = true, storage = new Map(), apiBase = "" } = {}) {
   const modules = new Map(), sources = [], requests = [], timers = new Map(), frames = new Map();
   let clock = 100000, nextTimer = 0;
   const document = new EventTarget(), window = new EventTarget();
   document.visibilityState = "visible";
+  window.localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) };
   function frame() {
     const pending = [...frames.values()]; frames.clear();
     for (const fn of pending) fn();
@@ -53,7 +54,8 @@ function setup({ autoPaint = true } = {}) {
       clearTimeout(id) { timers.delete(id); }, clearInterval(id) { timers.delete(id); },
       fetch(url, options) { return new Promise((resolve, reject) => requests.push({ url, options, resolve, reject })); },
       require(id) {
-        if (id === "./apiBase") return { apiUrl: value => value };
+        if (id === "./apiBase") return { apiUrl: value => apiBase + value };
+        if (id.startsWith("../components/")) return require("./loadTs.cjs")(id.slice("../components/".length));
         return load(id.slice(2));
       },
     }, { filename });
@@ -75,6 +77,72 @@ function setup({ autoPaint = true } = {}) {
 }
 const stats = head => ({ success: true, medians: [2, 2, 2, 2, 2, 2], pS10: .1, pS2_50: .5, asOfGameIndex: head });
 const flush = () => new Promise(resolve => setImmediate(resolve));
+
+test("page reload restores the saved stats immediately and refreshes without a live round", async () => {
+  const storage = new Map(), before = setup({ storage });
+  const off = before.load("crashStats").subscribeCrashStats(() => {});
+  await before.respond(0, stats(300)); off();
+  const after = setup({ storage }), seen = [];
+  const stop = after.load("crashStats").subscribeCrashStats(value => seen.push(value));
+  assert.equal(seen[0].asOfGameIndex, 300);
+  assert.equal(seen[0].stale, true); assert.equal(seen[0].liveUpdate, false);
+  assert.equal(after.requests.length, 1, "bootstrap does not wait for stream open");
+  await after.respond(0, stats(302));
+  assert.equal(seen.at(-1).asOfGameIndex, 302);
+  assert.equal(seen.at(-1).stale, false); assert.equal(seen.at(-1).liveUpdate, false);
+  stop();
+});
+
+test("temporary unmounts retain the snapshot and incomplete responses never clear valid numbers", async () => {
+  const h = setup(), api = h.load("crashStats"), seen = [];
+  api.subscribeCrashStats(() => {})();
+  const off = api.subscribeCrashStats(value => seen.push(value));
+  await h.respond(1, stats(300)); off();
+  const stop = api.subscribeCrashStats(value => seen.push(value));
+  assert.equal(seen.at(-1).asOfGameIndex, 300); assert.equal(seen.at(-1).stale, true);
+  await h.respond(2, { success: true, medians: [], pS10: null });
+  assert.equal(seen.at(-1).asOfGameIndex, 300);
+  stop(); await h.respond(0, stats(999));
+  assert.equal(seen.at(-1).asOfGameIndex, 300);
+});
+
+test("HTTP can restore current stats during a disconnected stream, without waiting for another round", async () => {
+  const h = setup(), seen = [], off = h.load("crashStats").subscribeCrashStats(value => seen.push(value));
+  h.sources[0].emit("error");
+  await h.respond(0, stats(300));
+  assert.equal(seen.at(-1).asOfGameIndex, 300);
+  assert.equal(seen.at(-1).stale, false); assert.equal(seen.at(-1).liveUpdate, false);
+  off();
+});
+
+test("bootstrap displays a usable behind-head snapshot while waiting for fresh stats", async () => {
+  const h = setup(), seen = [], off = h.load("crashStats").subscribeCrashStats(value => seen.push(value));
+  h.sources[0].emit("new_game", { gameIndex: 301 });
+  await h.respond(0, stats(300));
+  assert.equal(seen.at(-1).asOfGameIndex, 300); assert.equal(seen.at(-1).stale, true);
+  h.sources[0].emit("stats", stats(301));
+  assert.equal(seen.at(-1).asOfGameIndex, 301); assert.equal(seen.at(-1).liveUpdate, false);
+  off();
+});
+
+test("saved snapshots are API-scoped, validated and expire; disabled storage cannot break delivery", async () => {
+  const storage = new Map(), h = setup({ storage, apiBase: "https://stake.test" });
+  const saved = h.load("lastKnown");
+  saved.saveLastKnown("stats", stats(300));
+  assert.equal(saved.readLastKnown("stats", value => value).asOfGameIndex, 300);
+  const other = setup({ storage, apiBase: "https://shuffle.test" });
+  assert.equal(other.load("lastKnown").readLastKnown("stats", value => value), null);
+  h.advance(86400001);
+  assert.equal(saved.readLastKnown("stats", value => value), null);
+  for (const [key] of storage) storage.set(key, "invalid JSON");
+  assert.equal(saved.readLastKnown("stats", value => value), null);
+  Object.defineProperty(h.window, "localStorage", { get() { throw new Error("Storage blocked"); } });
+  assert.equal(saved.readLastKnown("stats", value => value), null);
+  saved.saveLastKnown("stats", stats(300));
+  const seen = [], off = h.load("crashStats").subscribeCrashStats(value => seen.push(value));
+  await h.respond(0, stats(302));
+  assert.equal(seen.at(-1).asOfGameIndex, 302); off();
+});
 
 test("four panels share one EventSource and close only after the last unsubscribe", () => {
   const h = setup(), api = h.load("crashEvents");
