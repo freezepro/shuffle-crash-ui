@@ -35,6 +35,40 @@ function previews(html) {
   return [...html.matchAll(/<div[^>]*data-testid="compact-preview"[^>]*>/g)].map(match => match[0]);
 }
 
+function cellBackgrounds(html) {
+  return [...html.matchAll(/<div style="([^"]*)" title="[^"]*">/g)]
+    .filter(match => match[1].startsWith("font-family:Arial"))
+    .map(match => match[1].match(/(?:^|;)background:([^;]+)/)[1]);
+}
+
+test("10x and higher anchors use Stake's similar-value backgrounds", () => {
+  for (const [anchor, lower, upper, outside] of [
+    [10, 9, 11.99, 12],
+    [14.85, 9, 22, 22.01],
+    [43.83, 20, 70, 70.01],
+    [100, 20, 150, 150.01],
+    [250, 50, 1000, 49.99],
+  ]) {
+    const values = Array(40).fill(1.2);
+    values[0] = anchor; values[10] = lower; values[20] = upper; values[30] = outside;
+    const backgrounds = cellBackgrounds(renderHistory(values));
+    for (const index of [0, 10, 20]) {
+      assert.equal(backgrounds[index], "rgba(234, 179, 8, 0.14)", `${anchor}x anchor, ${values[index]}x match`);
+    }
+    assert.equal(backgrounds[30], "#111827", `${outside}x is outside ${anchor}x's range`);
+  }
+});
+
+test("exact matches and 9x/10x blocks keep priority over similar-value backgrounds", () => {
+  const values = Array(50).fill(1.2);
+  values[0] = values[40] = 30;
+  values[20] = 10; values[22] = 9.5; values[24] = 40;
+  const backgrounds = cellBackgrounds(renderHistory(values));
+  for (const index of [0, 40]) assert.equal(backgrounds[index], "rgba(34, 197, 94, 0.14)");
+  for (const index of [20, 22, 24]) assert.equal(backgrounds[index], "rgba(56, 189, 248, 0.28)");
+  for (const index of [21, 23]) assert.equal(backgrounds[index], "rgba(148, 163, 184, 0.24)");
+});
+
 test("nine preview slots retain the Rows control without changing the ten-position count", () => {
   const values = Array(300).fill(1);
   [10.07, 16.36, 9.94, 12.34].forEach((value, i) => {

@@ -355,7 +355,6 @@ export default function StakeCrashHistory() {
     (r: CrashRow) => {
       const anchor = latestMultiplierRef.current ?? latestMultiplier;
       if (anchor == null) return false;
-      if (anchor >= 10 || r.multiplier >= 10) return false;
 
       const { min, max } = getSimilarRange(anchor);
       return within2dp(r.multiplier, min, max);
