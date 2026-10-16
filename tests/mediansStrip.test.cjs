@@ -19,6 +19,7 @@ function renderStrip(medians, rate, trend = null) {
       if (id === "react") return { ...React, default: React, useState: () => [states.shift(), () => {}], useEffect() {}, useMemo: fn => fn(), useRef: value => ({ current: value }) };
       if (id.endsWith(".module.css")) return { default: { strip: "strip", row: "row" } };
       if (id === "../lib/apiBase") return { apiUrl: value => value };
+      if (id === "../lib/crashStats") return { subscribeCrashStats() {} };
       if (id === "./useCrashPrediction") return { useCrashPrediction: () => ({ estimate: { probability: .1232916667, rowMatches: 3, gameIndex: 300 }, status: "live", alertUntil: 0 }) };
       if (id === "./useCrashAlertSound") return { useCrashAlertSound: () => ({ muted: false, ready: false, toggle() {} }) };
       if (id.startsWith("./")) return load(id.slice(2));

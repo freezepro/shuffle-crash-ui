@@ -22,6 +22,7 @@ function renderHistory(values, rowCount = 20) {
       useState: () => [states.shift(), () => {}], useEffect() {}, useMemo: fn => fn(),
       useCallback: fn => fn, useRef: value => ({ current: value }) };
     if (id === "../lib/apiBase") return { apiUrl: value => value };
+    if (id === "../lib/crashEvents") return { openCrashStream() {} };
     return require(id);
   }};
   vm.runInNewContext(code, context, { filename });

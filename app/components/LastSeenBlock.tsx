@@ -1,24 +1,28 @@
 "use client";
 
+import { subscribeCrashStats } from "../lib/crashStats";
+
 import React, { useEffect, useState } from "react";
 import { apiUrl } from "../lib/apiBase";
 
 export default function LastSeenBlock() {
   const [lastSeen, setLastSeen] = useState<Record<string, number | null> | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string>("");
+  const [pS2Percent, setPS2Percent] = useState<number | null>(null);
+
+  useEffect(() => subscribeCrashStats(data => {
+    const value = data?.pS2_50;
+    setPS2Percent(typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1
+      ? Number((value * 100).toFixed(1)) : null);
+  }), []);
 
   useEffect(() => {
     let alive = true;
 
     async function load() {
       try {
-        const [lastSeenRes, medRes] = await Promise.all([
-          fetch(apiUrl("/api/last-seen"), { cache: "no-store" }),
-          fetch(apiUrl("/api/medians"), { cache: "no-store" }),
-        ]);
-
+        const lastSeenRes = await fetch(apiUrl("/api/last-seen"), { cache: "no-store" });
         const lastSeenJson = await lastSeenRes.json();
-        const medJson = await medRes.json();
         if (!alive) return;
 
         const normalized: Record<string, number | null> = {
@@ -32,10 +36,6 @@ export default function LastSeenBlock() {
           "100000x": toNum(lastSeenJson?.["100000x"]),
           "1000000x": toNum(lastSeenJson?.["1000000x"]),
         };
-
-        const ps2 = medJson?.pS2_50;
-        normalized["2x50%"] = typeof ps2 === "number" && Number.isFinite(ps2) && ps2 >= 0 && ps2 <= 1
-          ? Number((ps2 * 100).toFixed(1)) : null;
 
         setLastSeen(normalized);
         setUpdatedAt(new Date().toLocaleTimeString());
@@ -76,7 +76,7 @@ export default function LastSeenBlock() {
 
       <div style={styles.grid}>
         {entries.map((entry) => {
-          const val = lastSeen[entry.key];
+          const val = entry.key === "2x50%" ? pS2Percent : lastSeen[entry.key];
           const isPercent = entry.key === "2x50%";
           return (
             <div key={entry.key} style={styles.card}>

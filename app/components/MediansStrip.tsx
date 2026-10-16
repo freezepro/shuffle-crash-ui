@@ -1,13 +1,13 @@
 "use client";
 
+import { subscribeCrashStats } from "../lib/crashStats";
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { frequencyValue, medianPause, medianValue } from "./medianPause";
 import { MedianTrend, readMedianTrend, trendDescription } from "./medianTrend";
 import CrashPredictionTile from "./CrashPredictionTile";
 import predictionStyles from "./CrashPredictionTile.module.css";
-import { apiUrl } from "../lib/apiBase";
 
-const URL = apiUrl("/api/medians");
 const WINDOWS = [50, 100, 200, 500, 1000];
 
 export default function MediansStrip() {
@@ -20,48 +20,13 @@ export default function MediansStrip() {
   const med200 = medians[2] ?? null;
   const medCrossOn = med50 !== null && med200 !== null && med50 > med200;
 
-  useEffect(() => {
-    let active = true;
-    let inflight = false;
-    let controller: AbortController | null = null;
-    async function load() {
-      if (inflight) return;
-      inflight = true;
-      const request = new AbortController();
-      controller = request;
-      const timeout = window.setTimeout(() => request.abort(), 10000);
-      try {
-        const medRes = await fetch(`${URL}?_t=${Date.now()}`, { cache: "no-store", signal: request.signal });
-        if (!medRes.ok) throw new Error(`Medians request failed: ${medRes.status}`);
-        const data = await medRes.json();
-        if (data?.success !== true) throw new Error("Medians response unavailable");
-        if (!active) return;
-        const vals = Array.isArray(data?.medians) ? data.medians : [];
-        const med = vals.map(medianValue);
-        const rate = frequencyValue(data?.pS10);
-        setMedians(med);
-        setPS10(rate);
-        setTrend(readMedianTrend(data?.trend, med[0] ?? null, rate));
-      } catch (e) {
-        if (!active) return;
-        setMedians([]);
-        setPS10(null);
-        setTrend(null);
-        console.error("medians load error", e);
-      } finally {
-        window.clearTimeout(timeout);
-        inflight = false;
-      }
-    }
-
-    load();
-    const t = setInterval(load, 5000);
-    return () => {
-      active = false;
-      clearInterval(t);
-      controller?.abort();
-    };
-  }, []);
+  useEffect(() => subscribeCrashStats(data => {
+    const med = (data?.medians ?? []).map(medianValue);
+    const rate = frequencyValue(data?.pS10);
+    setMedians(med);
+    setPS10(rate);
+    setTrend(readMedianTrend(data?.trend, med[0] ?? null, rate));
+  }), []);
 
   useEffect(() => {
     if (medCrossOn && !prevCrossOnRef.current && pause.state === "clear") playSignalTone();

@@ -1,5 +1,7 @@
 "use client";
 
+import { openCrashStream } from "../lib/crashEvents";
+
 import { useEffect, useState } from "react";
 import { CrashEstimate, CrashRound, estimateCrash, mergeCrashHistory, readCrashRound } from "./crashPrediction";
 
@@ -17,7 +19,7 @@ export function useCrashPrediction(): Reading {
     let request: AbortController | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let lastContact = Date.now();
-    const source = new EventSource(`${API}/api/stream`);
+    const source = openCrashStream();
 
     function publish(rounds: CrashRound[], liveEvent = false) {
       history = rounds;

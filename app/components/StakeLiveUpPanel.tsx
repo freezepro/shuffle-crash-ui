@@ -1,5 +1,7 @@
 "use client";
 
+import { openCrashStream } from "../lib/crashEvents";
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CartesianGrid,
@@ -16,7 +18,6 @@ import {
 import { apiUrl } from "../lib/apiBase";
 
 const SNAPSHOT_URL = apiUrl("/api/liveup/snapshot");
-const EVENTS_URL = apiUrl("/api/stream");
 const GREEN_STATE_KEY = "__stakeLiveupGreen";
 
 type Snapshot = {
@@ -79,7 +80,7 @@ export default function StakeLiveUpPanel({ active = true }: { active?: boolean }
 
   useEffect(() => {
     if (!active || page !== 1) return;
-    const es = new EventSource(EVENTS_URL);
+    const es = openCrashStream();
 
     es.addEventListener("new_game", () => {
       const now = Date.now();
@@ -291,9 +292,9 @@ export default function StakeLiveUpPanel({ active = true }: { active?: boolean }
               <ReferenceArea key={`${seg.start}-${seg.end}-${idx}`} x1={seg.start} x2={seg.end} yAxisId="mult" stroke="rgba(16,200,120,0.35)" fill="rgba(16,200,120,0.14)" />
             ))}
             <ReferenceLine yAxisId="p2" y={50} stroke="rgba(52,211,153,0.45)" strokeWidth={1} strokeDasharray="3 3" />
-            <Line yAxisId="mult" type="monotone" dataKey="mult" name="Multiplier" dot={false} stroke="#55b7ff" strokeWidth={1.1} />
-            <Line yAxisId="ps" type="monotone" dataKey="pS" name="pS %" dot={false} stroke="#ffb24d" strokeWidth={1.2} />
-            <Line yAxisId="p2" type="monotone" dataKey="p2" name="≥2x %" dot={false} stroke="#34d399" strokeWidth={1.2} />
+            <Line isAnimationActive={false} yAxisId="mult" type="monotone" dataKey="mult" name="Multiplier" dot={false} stroke="#55b7ff" strokeWidth={1.1} />
+            <Line isAnimationActive={false} yAxisId="ps" type="monotone" dataKey="pS" name="pS %" dot={false} stroke="#ffb24d" strokeWidth={1.2} />
+            <Line isAnimationActive={false} yAxisId="p2" type="monotone" dataKey="p2" name="≥2x %" dot={false} stroke="#34d399" strokeWidth={1.2} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

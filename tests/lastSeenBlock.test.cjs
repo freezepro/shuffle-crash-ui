@@ -31,6 +31,7 @@ async function renderBlock(rate) {
         useEffect(effect) { if (!mounted) effects.push(effect); },
       };
       if (id === "../lib/apiBase") return { apiUrl: value => value };
+      if (id === "../lib/crashStats") return { subscribeCrashStats(fn) { fn({ pS2_50: rate }); return () => {}; } };
       return require(id);
     },
   };
@@ -42,7 +43,7 @@ async function renderBlock(rate) {
   index = 0;
   const html = renderToStaticMarkup(React.createElement(context.exports.default));
   cleanups.forEach(cleanup => cleanup());
-  assert.deepEqual(requests.sort(), ["/api/last-seen", "/api/medians"]);
+  assert.deepEqual(requests.sort(), ["/api/last-seen"]);
   return html;
 }
 

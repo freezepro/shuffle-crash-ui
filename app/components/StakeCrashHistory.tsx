@@ -1,5 +1,7 @@
 "use client";
 
+import { openCrashStream } from "../lib/crashEvents";
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiUrl } from "../lib/apiBase";
 
@@ -281,7 +283,7 @@ export default function StakeCrashHistory() {
     if (!isLatestPage) return;
     if (!bootstrapped) return;
 
-    const es = new EventSource(apiUrl("/api/stream"));
+    const es = openCrashStream();
 
     es.addEventListener("new_game", (e) => {
       try {

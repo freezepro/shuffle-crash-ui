@@ -1,5 +1,7 @@
 "use client";
 
+import { openCrashStream } from "../lib/crashEvents";
+
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import {
   LineChart,
@@ -222,7 +224,7 @@ export default function CrashDashboard() {
     if (pageIndex !== 0) return;
 
     console.log("📡 SSE connect");
-    const es = new EventSource(apiUrl("/api/stream"));
+    const es = openCrashStream();
 
     es.addEventListener("new_game", (e) => {
       const g = JSON.parse((e as MessageEvent).data);
@@ -443,7 +445,7 @@ export default function CrashDashboard() {
          
                          {ALL_MEDIAN_KEYS.map(({ key, label }) =>
                            visibleSeries[key] ? (
-                             <Line key={key} dataKey={key} name={label} stroke={MEDIAN_COLORS[key]} dot={false} />
+                             <Line isAnimationActive={false} key={key} dataKey={key} name={label} stroke={MEDIAN_COLORS[key]} dot={false} />
                            ) : null
                          )}
                        </LineChart>

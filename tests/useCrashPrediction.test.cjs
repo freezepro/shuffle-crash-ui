@@ -41,6 +41,7 @@ function fixture() {
       };
       if (id === "./crashPrediction") return prediction;
       if (id === "../lib/apiBase") return { API_BASE: "https://shuffle.test" };
+      if (id === "../lib/crashEvents") return { openCrashStream: () => new Source("https://shuffle.test/api/stream") };
       throw new Error(`Unexpected import: ${id}`);
     },
   };
