@@ -7,7 +7,7 @@ export default function DashboardPage() {
       <div
         style={{
           minHeight: "100vh",
-          padding: "20px",
+          padding: "8px 20px",
           background: "#020617",
           color: "white",
         }}

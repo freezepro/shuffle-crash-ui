@@ -148,7 +148,7 @@ function getPSColor(p: number | null) {
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  wrap: { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "10px 4px", boxShadow: "0 0 10px rgba(0,0,0,0.35)", marginBottom: 12 },
+  wrap: { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "4px", boxShadow: "0 0 10px rgba(0,0,0,0.35)", marginBottom: 12 },
   wrapPaused: { borderColor: "#ff4d4f", boxShadow: "0 0 0 1px rgba(255,77,79,0.8) inset, 0 0 12px rgba(255,77,79,0.24)" },
   cell: { boxSizing: "border-box", minWidth: 0, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "var(--stat-cell-padding, 10px 6px)", background: "rgba(0,0,0,0.2)", textAlign: "center" },
   cellPaused: { borderColor: "#ff4d4f", boxShadow: "0 0 0 1px rgba(255,77,79,0.35) inset" },
