@@ -57,9 +57,10 @@
 .strip { container: crash-stats / inline-size; min-width: 0; max-width: 100%; box-sizing: border-box; }
 .row {
   --stats-min-width: 560px;
+  --stat-cell-padding: 8px 4px;
+  --stat-value-size: 32px;
   display: grid;
-  grid-template-columns: repeat(5, minmax(90px, 110px)) minmax(136px, 148px) minmax(90px, 104px);
-  justify-content: space-between;
+  grid-template-columns: repeat(5, minmax(90px, 1fr)) minmax(136px, 1.5fr) minmax(90px, .95fr);
   gap: 6px;
   box-sizing: border-box;
   width: max(100%, var(--stats-min-width));
@@ -72,14 +73,14 @@
     --stat-label-size: 10px;
     --stat-label-gap: 2px;
     --stat-trend-size: 9px;
-    --stat-value-size: 22px;
-    grid-template-columns: repeat(5, minmax(68px, 1fr)) minmax(118px, 1.55fr) minmax(64px, .95fr);
+    --stat-value-size: 24px;
+    grid-template-columns: repeat(5, minmax(68px, 1fr)) minmax(118px, 1.55fr) minmax(70px, .95fr);
     gap: 4px;
   }
   .tile { min-height: 56px; padding: 5px; }
   .reading { height: 22px; gap: 3px; padding-right: 16px; }
   .reading:last-child { padding-right: 10px; }
-  .reading strong { font-size: 18px; line-height: 22px; }
+  .reading strong { font-size: 20px; line-height: 22px; }
   .reading small { font-size: 12px; }
   .label { font-size: 10px; }
   .label sup { font-size: 7px; }
