@@ -59,9 +59,10 @@ export default function MediansStrip() {
       data-recovery-state={!stale && trend ? trend.recoveringFromLow ? "recovering" : "none" : "unavailable"}
       style={{ ...styles.wrap, ...(!stale && pause.state === "paused" ? styles.wrapPaused : null) }}
     >
-      <div className={predictionStyles.row}>
+      <div className={predictionStyles.row} role="group" aria-label="Medians and forecast">
         {WINDOWS.map((w) => {
           const m = mapped[w];
+          const valueText = m == null ? "—" : `${m.toFixed(2)}x`;
           return (
             <div
               key={w}
@@ -77,7 +78,7 @@ export default function MediansStrip() {
                 {w === 50 && stale && <RefreshCw size={10} aria-label="Updating stats" />}
                 {w === 50 && !stale && trend && <TrendMark trend={trend} metric="med50" />}
               </div>
-              <div style={{ ...styles.value, color: getMedianTone(m) }}>{m == null ? "—" : `${m.toFixed(2)}x`}</div>
+              <div style={{ ...styles.value, fontSize: `calc(var(--stat-value-size, 30px) * ${Math.min(1, 5 / valueText.length)})`, color: getMedianTone(m) }}>{valueText}</div>
             </div>
           );
         })}
@@ -149,14 +150,14 @@ function getPSColor(p: number | null) {
 const styles: Record<string, React.CSSProperties> = {
   wrap: { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 10, boxShadow: "0 0 10px rgba(0,0,0,0.35)", marginBottom: 12 },
   wrapPaused: { borderColor: "#ff4d4f", boxShadow: "0 0 0 1px rgba(255,77,79,0.8) inset, 0 0 12px rgba(255,77,79,0.24)" },
-  cell: { boxSizing: "border-box", minWidth: 0, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "10px 6px", background: "rgba(0,0,0,0.2)", textAlign: "center" },
+  cell: { boxSizing: "border-box", minWidth: 0, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "var(--stat-cell-padding, 10px 6px)", background: "rgba(0,0,0,0.2)", textAlign: "center" },
   cellPaused: { borderColor: "#ff4d4f", boxShadow: "0 0 0 1px rgba(255,77,79,0.35) inset" },
   cellCrossOn: {
     borderColor: "rgba(34,197,94,0.95)",
     boxShadow: "0 0 0 2px rgba(34,197,94,0.24) inset, 0 0 14px rgba(34,197,94,0.35)",
     borderRadius: 12,
   },
-  label: { display: "flex", alignItems: "center", justifyContent: "center", gap: 4, height: 13, whiteSpace: "nowrap", fontSize: 11, color: "rgba(255,255,255,0.68)", fontWeight: 700 },
-  trend: { fontSize: 10, lineHeight: "13px", fontVariantNumeric: "tabular-nums" },
-  value: { marginTop: 4, fontSize: 30, lineHeight: 1, fontWeight: 900 },
+  label: { display: "flex", alignItems: "center", justifyContent: "center", gap: "var(--stat-label-gap, 4px)", height: 13, whiteSpace: "nowrap", fontSize: "var(--stat-label-size, 11px)", color: "rgba(255,255,255,0.68)", fontWeight: 700 },
+  trend: { fontSize: "var(--stat-trend-size, 10px)", lineHeight: "13px", fontVariantNumeric: "tabular-nums" },
+  value: { marginTop: 4, fontSize: "var(--stat-value-size, 30px)", lineHeight: 1, fontWeight: 900 },
 };
