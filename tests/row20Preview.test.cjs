@@ -12,7 +12,7 @@ function renderHistory(values, rowCount = 20, hooks = {}) {
   const rows = values.map((multiplier, i) => ({
     multiplier, gameNumber: 300 - i, timestamp: "2026-10-01T12:00:00.000Z",
   }));
-  const states = [rows, 0, false, true, rowCount, rows[0]?.multiplier ?? null];
+  const states = [rows, 0, false, hooks.compact ?? true, rowCount, rows[0]?.multiplier ?? null];
   const filename = path.join(__dirname, "../app/components/StakeCrashHistory.tsx");
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
@@ -40,6 +40,39 @@ function cellBackgrounds(html) {
     .filter(match => match[1].startsWith("font-family:Arial"))
     .map(match => match[1].match(/(?:^|;)background:([^;]+)/)[1]);
 }
+
+test("round 4134426's stored 1.15x stays 1.15x in both grid modes and the ghost row", () => {
+  const values = Array(40).fill(1.15);
+  for (const compact of [true, false]) {
+    const html = renderHistory(values, 20, { compact });
+    assert.ok(html.includes('1.15x'));
+    assert.ok(!html.includes('1.14x'));
+    if (compact) {
+      assert.match(html, /20R before the next round on this page: 1\.15x/);
+    }
+  }
+});
+
+test("two-decimal payouts keep their cents, including large values", () => {
+  for (const value of [1.13, 1.14, 1.15, 1.16, 2.3, 4.1, 9.95, 16.4, 100.01, 1048576.13]) {
+    const html = renderHistory([value], 20, { compact: false });
+    assert.ok(html.includes(`>${value.toFixed(2)}x<`), `${value}x`);
+  }
+});
+
+test("extra decimals are still truncated, not rounded up", () => {
+  for (const [value, expected] of [[1.1499, '1.14'], [1.1599, '1.15'], [9.9999, '9.99']]) {
+    const html = renderHistory([value], 20, { compact: false });
+    assert.ok(html.includes(`>${expected}x<`), `${value}x`);
+  }
+});
+
+test("exact-match highlighting does not merge 1.14x with 1.15x", () => {
+  const backgrounds = cellBackgrounds(renderHistory([1.15, 1.14, 1.15]));
+  assert.equal(backgrounds[0], 'rgba(34, 197, 94, 0.14)');
+  assert.equal(backgrounds[1], 'rgba(234, 179, 8, 0.14)');
+  assert.equal(backgrounds[2], 'rgba(34, 197, 94, 0.14)');
+});
 
 test("10x and higher anchors use Stake's similar-value backgrounds", () => {
   for (const [anchor, lower, upper, outside] of [

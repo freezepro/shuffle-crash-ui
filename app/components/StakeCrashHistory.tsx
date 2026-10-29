@@ -43,7 +43,9 @@ function formatDate(ts: string) {
 }
 
 function multiplierKey(x: number) {
-  return (Math.floor(x * 100) / 100).toFixed(2);
+  const scaled = x * 100;
+  // Recover floating-point noise (1.15 * 100 < 115) without rounding extra decimals.
+  return (Math.floor(scaled + Math.abs(scaled) * Number.EPSILON) / 100).toFixed(2);
 }
 
 function getSimilarRange(anchor: number): { min: number; max: number } {
